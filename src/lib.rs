@@ -4,14 +4,22 @@
 
 use core::f32;
 
-use nalgebra::{Quaternion, UnitQuaternion, Vector3};
+use nalgebra::{Quaternion, Rotation3, UnitQuaternion, Vector2, Vector3};
+
+pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
+    let z = acc;
+    let x = z.cross(&(-mag)).cross(z);
+    let y = z.cross(&x);
+    let rot = Rotation3::from_basis_unchecked(&[x.normalize(), y.normalize(), z.normalize()]);
+    UnitQuaternion::from_rotation_matrix(&rot)
+}
 
 #[derive(Debug)]
 pub struct Mahony {
     dt: f32,
     kp: f32,
     ki: f32,
-    e_int: Vector3<f32>,
+    pub bias: Vector3<f32>,
     pub quaternion: UnitQuaternion<f32>,
 }
 
@@ -22,7 +30,7 @@ impl Default for Mahony {
             dt: (1.0f32) / (256.0f32),
             kp: 0.5f32,
             ki: 0.0f32,
-            e_int: Vector3::new(0.0, 0.0, 0.0),
+            bias: Vector3::new(0.0, 0.0, 0.0),
             quaternion,
         }
     }
@@ -39,7 +47,7 @@ impl Mahony {
             dt,
             kp,
             ki,
-            e_int: Vector3::new(0.0, 0.0, 0.0),
+            bias: Vector3::new(0.0, 0.0, 0.0),
             quaternion,
         }
     }
@@ -74,15 +82,54 @@ impl Mahony {
             2.0 * (q[3] * q[0] + q[1] * q[2]),
             q[3] * q[3] - q[0] * q[0] - q[1] * q[1] + q[2] * q[2],
         );
-        let v = self.quaternion.inverse() * Vector3::z();
+
         let e = accel.cross(&v);
-        self.e_int += e * self.dt;
+        let b_dot = -self.ki * e;
+        self.bias += b_dot * self.dt;
+        let corrected = *gyroscope + e * self.kp - self.bias;
+        self.update_gyro(&corrected)
+    }
 
-        let gyro = *gyroscope + e * self.kp + self.e_int * self.ki;
+    pub fn update(
+        &mut self,
+        gyroscope: &Vector3<f32>,
+        accelerometer: &Vector3<f32>,
+        magnetometer: &Vector3<f32>,
+    ) -> &UnitQuaternion<f32> {
+        let q = self.quaternion.as_ref();
+        let two = 2.0;
 
-        let q_dot = q * Quaternion::from_parts(0.0, gyro) * 0.5;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
-        &self.quaternion
+        let Some(accel) = accelerometer.try_normalize(0.0) else {
+            return self.update_gyro(gyroscope);
+        };
+
+        let Some(mag) = magnetometer.try_normalize(0.0) else {
+            return self.update_imu(gyroscope, accelerometer);
+        };
+
+        let h = q * (Quaternion::from_parts(0.0, mag) * q.conjugate());
+        let b = Quaternion::new(0.0, Vector2::new(h[0], h[1]).norm(), 0.0, h[2]);
+
+        let v = Vector3::new(
+            two * (q[0] * q[2] - q[3] * q[1]),
+            two * (q[3] * q[0] + q[1] * q[2]),
+            q[3] * q[3] - q[0] * q[0] - q[1] * q[1] + q[2] * q[2],
+        );
+
+        let w = Vector3::new(
+            2.0 * b[0] * (0.5 - q[1] * q[1] - q[2] * q[2])
+                + 2.0 * b[2] * (q[0] * q[2] - q[3] * q[1]),
+            2.0 * b[0] * (q[0] * q[1] - q[3] * q[2]) + 2.0 * b[2] * (q[3] * q[0] + q[1] * q[2]),
+            2.0 * b[0] * (q[3] * q[1] + q[0] * q[2])
+                + 2.0 * b[2] * (0.5 - q[0] * q[0] - q[1] * q[1]),
+        );
+
+        let e: Vector3<f32> = accel.cross(&v) + mag.cross(&w);
+        let b_dot = -self.ki * e;
+        self.bias += b_dot * self.dt;
+
+        let corrected = *gyroscope + e * self.kp - self.bias;
+        self.update_gyro(&corrected)
     }
 }
 
@@ -110,6 +157,12 @@ mod tests {
         ahrs.update_gyro(&Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
+
+        ahrs.update_gyro(&Vector3::new(-0.5f32, 0.0f32, 0.0f32));
+        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
     }
