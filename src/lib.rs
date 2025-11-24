@@ -7,10 +7,10 @@ use core::f32;
 use nalgebra::{Quaternion, Rotation3, UnitQuaternion, Vector2, Vector3};
 
 pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
-    let z = acc;
-    let x = z.cross(&(-mag)).cross(z);
-    let y = z.cross(&x);
-    let rot = Rotation3::from_basis_unchecked(&[x.normalize(), y.normalize(), z.normalize()]);
+    let z_body = acc.normalize();
+    let y_body = acc.cross(mag).normalize();
+    let x_body = y_body.cross(&z_body).normalize();
+    let rot = Rotation3::from_basis_unchecked(&[x_body, y_body, z_body]);
     UnitQuaternion::from_rotation_matrix(&rot)
 }
 
@@ -185,5 +185,44 @@ mod tests {
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.05, epsilon = 0.0001);
+    }
+
+    #[test]
+    fn test_quat_from_acc_mag_identity() {
+        // Body Z-axis points down (aligned with Earth Z)
+        let acc = Vector3::new(0.0, 0.0, 1.0);
+        // Body X-axis points North (aligned with Earth X)
+        let mag = Vector3::new(1.0, 0.0, 0.0);
+        let quat = quat_from_acc_mag(&acc, &mag);
+        let (roll, pitch, yaw) = quat.euler_angles();
+        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
+    }
+
+    #[test]
+    fn test_quat_from_acc_mag_yaw_90() {
+        // Body Z-axis points down
+        let acc = Vector3::new(0.0, 0.0, 1.0);
+        // Body Y-axis points North
+        let mag = Vector3::new(0.0, 1.0, 0.0);
+        let quat = quat_from_acc_mag(&acc, &mag);
+        let (roll, pitch, yaw) = quat.euler_angles();
+        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+    }
+
+    #[test]
+    fn test_quat_from_acc_mag_pitch_neg_90() {
+        // Body X-axis points down
+        let acc = Vector3::new(1.0, 0.0, 0.0);
+        // Body Y-axis points North
+        let mag = Vector3::new(0.0, 1.0, 0.0);
+        let quat = quat_from_acc_mag(&acc, &mag);
+        let (roll, pitch, yaw) = quat.euler_angles();
+        assert_relative_eq!(roll, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
     }
 }
