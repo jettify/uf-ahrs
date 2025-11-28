@@ -5,4 +5,5 @@ mod mahony;
 mod traits;
 
 pub use mahony::Mahony;
+pub use mahony::quat_from_acc_mag;
 pub use traits::Ahrs;

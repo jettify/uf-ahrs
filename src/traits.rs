@@ -1,4 +1,4 @@
-use nalgebra::{Scalar, UnitQuaternion, Vector3};
+use nalgebra::{UnitQuaternion, Vector3};
 
 pub trait Ahrs {
     fn update(

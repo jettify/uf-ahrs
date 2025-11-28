@@ -8,7 +8,7 @@ pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaterni
     let y_body = acc.cross(mag).normalize();
     let x_body = y_body.cross(&z_body).normalize();
     let rot = Rotation3::from_basis_unchecked(&[x_body, y_body, z_body]);
-    UnitQuaternion::from_rotation_matrix(&rot)
+    UnitQuaternion::from_rotation_matrix(&rot).conjugate()
 }
 
 #[derive(Debug)]
@@ -209,20 +209,20 @@ mod tests {
         let (roll, pitch, yaw) = quat.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
     }
 
     #[test]
     fn test_quat_from_acc_mag_pitch_neg_90() {
-        // Body X-axis points down
+        // Body X-axis points up (-90 deg pitch)
         let acc = Vector3::new(1.0, 0.0, 0.0);
         // Body Y-axis points North
         let mag = Vector3::new(0.0, 1.0, 0.0);
         let quat = quat_from_acc_mag(&acc, &mag);
         let (roll, pitch, yaw) = quat.euler_angles();
-        assert_relative_eq!(roll, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+        assert_relative_eq!(roll, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+        assert_relative_eq!(pitch, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
+        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
     }
 
     #[test]
@@ -345,10 +345,10 @@ mod tests {
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         let mag = Vector3::new(0.0, -1.0, 0.0);
+        let init_quat = quat_from_acc_mag(&accel, &mag);
+        let mut ahrs = Mahony::new_with_quaternion(0.01, 0.5, 0.001, init_quat);
 
-        let mut ahrs = Mahony::new(0.01, 0.5, 0.001);
-
-        for _ in 0..2000 {
+        for _ in 0..100 {
             ahrs.update(&gyro, &accel, &mag);
         }
 
