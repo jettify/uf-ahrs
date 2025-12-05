@@ -1,14 +1,15 @@
 use core::f32;
 
 use crate::traits::Ahrs;
-use nalgebra::{Quaternion, Rotation3, UnitQuaternion, Vector2, Vector3};
+use nalgebra::{Matrix3, Quaternion, Rotation3, UnitQuaternion, Vector2, Vector3};
 
 pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
-    let z_body = acc.normalize();
-    let y_body = acc.cross(mag).normalize();
-    let x_body = y_body.cross(&z_body).normalize();
-    let rot = Rotation3::from_basis_unchecked(&[x_body, y_body, z_body]);
-    UnitQuaternion::from_rotation_matrix(&rot).conjugate()
+    let z = acc;
+    let x_temp = z.cross(&-mag);
+    let x = x_temp.cross(z);
+    let y = z.cross(&x);
+    let mat = Matrix3::from_columns(&[x.normalize(), y.normalize(), z.normalize()]);
+    UnitQuaternion::from_matrix(&mat)
 }
 
 #[derive(Debug)]
@@ -188,10 +189,8 @@ mod tests {
 
     #[test]
     fn test_quat_from_acc_mag_identity() {
-        // Body Z-axis points down (aligned with Earth Z)
-        let acc = Vector3::new(0.0, 0.0, 1.0);
-        // Body X-axis points North (aligned with Earth X)
-        let mag = Vector3::new(1.0, 0.0, 0.0);
+        let acc = Vector3::new(0.0, 0.0, 9.81);
+        let mag = Vector3::new(-1.0, 0.0, 0.0);
         let quat = quat_from_acc_mag(&acc, &mag);
         let (roll, pitch, yaw) = quat.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -223,6 +222,18 @@ mod tests {
         assert_relative_eq!(roll, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
         assert_relative_eq!(pitch, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
+    }
+
+    #[test]
+    fn test_quat_from_acc_mag_compare() {
+        let acc = Vector3::new(-0.23618742, -0.36316485, 9.91931498);
+        let mag = Vector3::new(0.22260694, 15.82182425, -38.33789427);
+
+        let quat = quat_from_acc_mag(&acc, &mag);
+        assert_relative_eq!(quat.w, 0.72379941);
+        assert_relative_eq!(quat.i, 0.02145037);
+        assert_relative_eq!(quat.j, 0.00400592);
+        assert_relative_eq!(quat.k, -0.68966532);
     }
 
     #[test]
@@ -348,7 +359,7 @@ mod tests {
         let init_quat = quat_from_acc_mag(&accel, &mag);
         let mut ahrs = Mahony::new_with_quaternion(0.01, 0.5, 0.001, init_quat);
 
-        for _ in 0..100 {
+        for _ in 0..2000 {
             ahrs.update(&gyro, &accel, &mag);
         }
 
@@ -356,5 +367,23 @@ mod tests {
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.01);
+    }
+
+    #[test]
+    fn test_gyro_xxx() {
+        //    "Kp": 0.74,
+        //"Ki": 0.0012
+        let gyro = Vector3::new(-0.23618742, -0.36316485, 9.91931498);
+        let acc = Vector3::new(-0.00106465, -0.00426035, 0.00532674);
+        let mag = Vector3::new(0.22260694, 15.82182425, -38.33789427);
+
+        // [0.22511372, -0.24940921, 0.508684, 0.79269123]
+        //  0.72379029,  0.0213377 ,  0.00400527, -0.68967843
+        let init_quat = quat_from_acc_mag(&acc, &mag);
+        let dt: f32 = 0.0035;
+        let mut ahrs = Mahony::new_with_quaternion(dt, 0.74, 0.0012, init_quat);
+        ahrs.update(&gyro, &acc, &mag);
+        std::println!("xxxx {}", ahrs.quaternion);
+        std::println!("xxxx {:?}", ahrs.quaternion);
     }
 }
