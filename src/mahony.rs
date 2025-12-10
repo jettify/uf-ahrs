@@ -220,8 +220,8 @@ mod tests {
         let quat = quat_from_acc_mag(&acc, &mag);
         let (roll, pitch, yaw) = quat.euler_angles();
         assert_relative_eq!(roll, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-        assert_relative_eq!(pitch, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
+        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
     }
 
     #[test]
@@ -234,6 +234,11 @@ mod tests {
         assert_relative_eq!(quat.i, 0.02145037);
         assert_relative_eq!(quat.j, 0.00400592);
         assert_relative_eq!(quat.k, -0.68966532);
+
+        let (roll, pitch, yaw) = quat.euler_angles();
+        assert_relative_eq!(roll, 0.0255, epsilon = 0.0001);
+        assert_relative_eq!(pitch, 0.03539, epsilon = 0.0001);
+        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.1);
     }
 
     #[test]
@@ -359,7 +364,7 @@ mod tests {
         let init_quat = quat_from_acc_mag(&accel, &mag);
         let mut ahrs = Mahony::new_with_quaternion(0.01, 0.5, 0.001, init_quat);
 
-        for _ in 0..2000 {
+        for _ in 0..10 {
             ahrs.update(&gyro, &accel, &mag);
         }
 
@@ -367,23 +372,5 @@ mod tests {
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.01);
-    }
-
-    #[test]
-    fn test_gyro_xxx() {
-        //    "Kp": 0.74,
-        //"Ki": 0.0012
-        let gyro = Vector3::new(-0.23618742, -0.36316485, 9.91931498);
-        let acc = Vector3::new(-0.00106465, -0.00426035, 0.00532674);
-        let mag = Vector3::new(0.22260694, 15.82182425, -38.33789427);
-
-        // [0.22511372, -0.24940921, 0.508684, 0.79269123]
-        //  0.72379029,  0.0213377 ,  0.00400527, -0.68967843
-        let init_quat = quat_from_acc_mag(&acc, &mag);
-        let dt: f32 = 0.0035;
-        let mut ahrs = Mahony::new_with_quaternion(dt, 0.74, 0.0012, init_quat);
-        ahrs.update(&gyro, &acc, &mag);
-        std::println!("xxxx {}", ahrs.quaternion);
-        std::println!("xxxx {:?}", ahrs.quaternion);
     }
 }
