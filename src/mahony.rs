@@ -1,7 +1,7 @@
 use core::f32;
 
 use crate::traits::Ahrs;
-use nalgebra::{Matrix3, Quaternion, Rotation3, UnitQuaternion, Vector2, Vector3};
+use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector2, Vector3};
 
 pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
     let z = acc;
@@ -99,11 +99,11 @@ impl Ahrs for Mahony {
         let q = self.quaternion.as_ref();
         let two = 2.0;
 
-        let Some(accel) = accelerometer.try_normalize(0.0) else {
+        let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
             return self.update_gyro(gyroscope);
         };
 
-        let Some(mag) = magnetometer.try_normalize(0.0) else {
+        let Some(mag) = magnetometer.try_normalize(f32::EPSILON) else {
             return self.update_imu(gyroscope, accelerometer);
         };
 
