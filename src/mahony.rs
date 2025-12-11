@@ -1,16 +1,7 @@
 use core::f32;
 
 use crate::traits::Ahrs;
-use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector2, Vector3};
-
-pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
-    let z = acc;
-    let x_temp = z.cross(&-mag);
-    let x = x_temp.cross(z);
-    let y = z.cross(&x);
-    let mat = Matrix3::from_columns(&[x.normalize(), y.normalize(), z.normalize()]);
-    UnitQuaternion::from_matrix(&mat)
-}
+use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
 #[derive(Debug)]
 pub struct Mahony {
@@ -188,60 +179,6 @@ mod tests {
     }
 
     #[test]
-    fn test_quat_from_acc_mag_identity() {
-        let acc = Vector3::new(0.0, 0.0, 9.81);
-        let mag = Vector3::new(-1.0, 0.0, 0.0);
-        let quat = quat_from_acc_mag(&acc, &mag);
-        let (roll, pitch, yaw) = quat.euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_quat_from_acc_mag_yaw_90() {
-        // Body Z-axis points down
-        let acc = Vector3::new(0.0, 0.0, 1.0);
-        // Body Y-axis points North
-        let mag = Vector3::new(0.0, 1.0, 0.0);
-        let quat = quat_from_acc_mag(&acc, &mag);
-        let (roll, pitch, yaw) = quat.euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_quat_from_acc_mag_pitch_neg_90() {
-        // Body X-axis points up (-90 deg pitch)
-        let acc = Vector3::new(1.0, 0.0, 0.0);
-        // Body Y-axis points North
-        let mag = Vector3::new(0.0, 1.0, 0.0);
-        let quat = quat_from_acc_mag(&acc, &mag);
-        let (roll, pitch, yaw) = quat.euler_angles();
-        assert_relative_eq!(roll, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_quat_from_acc_mag_compare() {
-        let acc = Vector3::new(-0.23618742, -0.36316485, 9.91931498);
-        let mag = Vector3::new(0.22260694, 15.82182425, -38.33789427);
-
-        let quat = quat_from_acc_mag(&acc, &mag);
-        assert_relative_eq!(quat.w, 0.72379941);
-        assert_relative_eq!(quat.i, 0.02145037);
-        assert_relative_eq!(quat.j, 0.00400592);
-        assert_relative_eq!(quat.k, -0.68966532);
-
-        let (roll, pitch, yaw) = quat.euler_angles();
-        assert_relative_eq!(roll, 0.0255, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.03539, epsilon = 0.0001);
-        assert_relative_eq!(yaw, -core::f32::consts::FRAC_PI_2, epsilon = 0.1);
-    }
-
-    #[test]
     fn test_imu_level() {
         let mut ahrs = Mahony::default();
         let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -361,10 +298,9 @@ mod tests {
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         let mag = Vector3::new(0.0, -1.0, 0.0);
-        let init_quat = quat_from_acc_mag(&accel, &mag);
-        let mut ahrs = Mahony::new_with_quaternion(0.01, 0.5, 0.001, init_quat);
+        let mut ahrs = Mahony::new(0.01, 0.5, 0.001);
 
-        for _ in 0..10 {
+        for _ in 0..1000 {
             ahrs.update(&gyro, &accel, &mag);
         }
 
