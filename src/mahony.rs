@@ -9,7 +9,7 @@ pub struct Mahony {
     kp: f32,
     ki: f32,
     pub bias: Vector3<f32>,
-    pub quaternion: UnitQuaternion<f32>,
+    quaternion: UnitQuaternion<f32>,
 }
 
 impl Default for Mahony {
@@ -50,6 +50,10 @@ impl Mahony {
 }
 
 impl Ahrs for Mahony {
+    fn orientation(&self) -> UnitQuaternion<f32> {
+        self.quaternion
+    }
+
     fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
         self.update_gyro_with_dt(gyroscope, self.dt)
     }
@@ -132,7 +136,7 @@ mod tests {
         let mut ahrs = Mahony::default();
         let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
         ahrs.update_gyro(gyro);
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_abs_diff_eq!(roll, 0.0);
         assert_abs_diff_eq!(pitch, 0.0);
         assert_abs_diff_eq!(yaw, 0.0);
@@ -142,13 +146,13 @@ mod tests {
     fn test_gyro_roll_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
 
         ahrs.update_gyro(Vector3::new(-0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -158,7 +162,7 @@ mod tests {
     fn test_gyro_pitch_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.05, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -168,7 +172,7 @@ mod tests {
     fn test_gyro_yaw_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.05, epsilon = 0.0001);
@@ -182,7 +186,7 @@ mod tests {
         for _ in 0..100 {
             ahrs.update_imu(gyro, accel);
         }
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -200,7 +204,7 @@ mod tests {
             ahrs.update_imu(gyro, accel);
         }
 
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, rad_45, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
@@ -218,7 +222,7 @@ mod tests {
             ahrs.update_imu(gyro, accel);
         }
 
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, rad_45, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
@@ -227,7 +231,7 @@ mod tests {
     #[test]
     fn test_imu_zero_accelerometer() {
         let mut ahrs = Mahony::default();
-        let initial_quat = ahrs.quaternion;
+        let initial_quat = ahrs.orientation();
 
         let gyro = Vector3::new(0.1, 0.2, 0.3);
         let accel = Vector3::new(0.0, 0.0, 0.0);
@@ -237,8 +241,8 @@ mod tests {
         let mut expected_ahrs = Mahony::default();
         expected_ahrs.update_gyro(gyro);
 
-        assert_relative_eq!(ahrs.quaternion, expected_ahrs.quaternion);
-        assert_ne!(ahrs.quaternion, initial_quat);
+        assert_relative_eq!(ahrs.orientation(), expected_ahrs.orientation());
+        assert_ne!(ahrs.orientation(), initial_quat);
     }
 
     #[test]
@@ -251,7 +255,7 @@ mod tests {
         for _ in 0..2000 {
             ahrs.update(gyro, accel, mag);
         }
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
@@ -269,7 +273,7 @@ mod tests {
         ahrs_update.update(gyro, accel, mag);
         ahrs_imu.update_imu(gyro, accel);
 
-        assert_relative_eq!(ahrs_update.quaternion, ahrs_imu.quaternion);
+        assert_relative_eq!(ahrs_update.orientation(), ahrs_imu.orientation());
         assert_relative_eq!(ahrs_update.bias, ahrs_imu.bias);
     }
 
@@ -285,7 +289,7 @@ mod tests {
         ahrs_update.update(gyro, accel, mag);
         ahrs_gyro.update_gyro(gyro);
 
-        assert_relative_eq!(ahrs_update.quaternion, ahrs_gyro.quaternion);
+        assert_relative_eq!(ahrs_update.orientation(), ahrs_gyro.orientation());
         assert_relative_eq!(ahrs_update.bias, ahrs_gyro.bias);
     }
 
@@ -300,7 +304,7 @@ mod tests {
             ahrs.update(gyro, accel, mag);
         }
 
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, core::f32::consts::FRAC_PI_2, epsilon = 0.01);

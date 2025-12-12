@@ -10,7 +10,7 @@ use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, V
 pub struct Madgwick {
     dt: f32,
     beta: f32,
-    pub quaternion: UnitQuaternion<f32>,
+    quaternion: UnitQuaternion<f32>,
 }
 
 impl Default for Madgwick {
@@ -42,6 +42,9 @@ impl Madgwick {
 }
 
 impl Ahrs for Madgwick {
+    fn orientation(&self) -> UnitQuaternion<f32> {
+        self.quaternion
+    }
     fn update(
         &mut self,
         gyroscope: Vector3<f32>,
@@ -192,7 +195,7 @@ mod tests {
         let mut ahrs = Madgwick::default();
         let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
         ahrs.update_gyro(gyro);
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_abs_diff_eq!(roll, 0.0);
         assert_abs_diff_eq!(pitch, 0.0);
         assert_abs_diff_eq!(yaw, 0.0);
@@ -202,13 +205,13 @@ mod tests {
     fn test_gyro_roll_estimation() {
         let mut ahrs = Madgwick::new(0.1, 0.1);
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
 
         ahrs.update_gyro(Vector3::new(-0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -218,7 +221,7 @@ mod tests {
     fn test_gyro_pitch_estimation() {
         let mut ahrs = Madgwick::new(0.1, 0.1);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.05, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -228,7 +231,7 @@ mod tests {
     fn test_gyro_yaw_estimation() {
         let mut ahrs = Madgwick::new(0.1, 0.0);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
-        let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.05, epsilon = 0.0001);

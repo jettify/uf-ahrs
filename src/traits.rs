@@ -1,6 +1,7 @@
 use nalgebra::{UnitQuaternion, Vector3};
 
 pub trait Ahrs {
+    fn orientation(&self) -> UnitQuaternion<f32>;
     fn update(
         &mut self,
         gyroscope: Vector3<f32>,
