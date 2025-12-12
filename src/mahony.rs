@@ -41,28 +41,24 @@ impl Mahony {
         }
     }
 
-    pub fn update_gyro_with_dt(
-        &mut self,
-        gyroscope: &Vector3<f32>,
-        dt: f32,
-    ) -> &UnitQuaternion<f32> {
+    pub fn update_gyro_with_dt(&mut self, gyroscope: Vector3<f32>, dt: f32) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
-        let q_dot = q * Quaternion::from_parts(0.0, *gyroscope) * 0.5;
+        let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * 0.5;
         self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
-        &self.quaternion
+        self.quaternion
     }
 }
 
 impl Ahrs for Mahony {
-    fn update_gyro(&mut self, gyroscope: &Vector3<f32>) -> &UnitQuaternion<f32> {
+    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
         self.update_gyro_with_dt(gyroscope, self.dt)
     }
 
     fn update_imu(
         &mut self,
-        gyroscope: &Vector3<f32>,
-        accelerometer: &Vector3<f32>,
-    ) -> &UnitQuaternion<f32> {
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
 
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
@@ -77,16 +73,16 @@ impl Ahrs for Mahony {
         let e = accel.cross(&v);
         let b_dot = -self.ki * e;
         self.bias += b_dot * self.dt;
-        let corrected = *gyroscope + e * self.kp - self.bias;
-        self.update_gyro(&corrected)
+        let corrected = gyroscope + e * self.kp - self.bias;
+        self.update_gyro(corrected)
     }
 
     fn update(
         &mut self,
-        gyroscope: &Vector3<f32>,
-        accelerometer: &Vector3<f32>,
-        magnetometer: &Vector3<f32>,
-    ) -> &UnitQuaternion<f32> {
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
         let two = 2.0;
 
@@ -119,8 +115,8 @@ impl Ahrs for Mahony {
         let b_dot = -self.ki * e;
         self.bias += b_dot * self.dt;
 
-        let corrected = *gyroscope + e * self.kp - self.bias;
-        self.update_gyro(&corrected)
+        let corrected = gyroscope + e * self.kp - self.bias;
+        self.update_gyro(corrected)
     }
 }
 
@@ -135,7 +131,7 @@ mod tests {
     fn test_zero_rotation() {
         let mut ahrs = Mahony::default();
         let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
-        ahrs.update_gyro(&gyro);
+        ahrs.update_gyro(gyro);
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_abs_diff_eq!(roll, 0.0);
         assert_abs_diff_eq!(pitch, 0.0);
@@ -145,13 +141,13 @@ mod tests {
     #[test]
     fn test_gyro_roll_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
-        ahrs.update_gyro(&Vector3::new(0.5f32, 0.0f32, 0.0f32));
+        ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
 
-        ahrs.update_gyro(&Vector3::new(-0.5f32, 0.0f32, 0.0f32));
+        ahrs.update_gyro(Vector3::new(-0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
@@ -161,7 +157,7 @@ mod tests {
     #[test]
     fn test_gyro_pitch_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
-        ahrs.update_gyro(&Vector3::new(0.0f32, 0.5f32, 0.0f32));
+        ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.05, epsilon = 0.0001);
@@ -171,7 +167,7 @@ mod tests {
     #[test]
     fn test_gyro_yaw_estimation() {
         let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
-        ahrs.update_gyro(&Vector3::new(0.0f32, 0.0f32, 0.5f32));
+        ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
@@ -184,7 +180,7 @@ mod tests {
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         for _ in 0..100 {
-            ahrs.update_imu(&gyro, &accel);
+            ahrs.update_imu(gyro, accel);
         }
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -201,7 +197,7 @@ mod tests {
         let accel = Vector3::new(-rad_45.sin(), 0.0, rad_45.cos());
 
         for _ in 0..1000 {
-            ahrs.update_imu(&gyro, &accel);
+            ahrs.update_imu(gyro, accel);
         }
 
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
@@ -219,7 +215,7 @@ mod tests {
         let accel = Vector3::new(0.0, rad_45.sin(), rad_45.cos());
 
         for _ in 0..1000 {
-            ahrs.update_imu(&gyro, &accel);
+            ahrs.update_imu(gyro, accel);
         }
 
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
@@ -236,10 +232,10 @@ mod tests {
         let gyro = Vector3::new(0.1, 0.2, 0.3);
         let accel = Vector3::new(0.0, 0.0, 0.0);
 
-        ahrs.update_imu(&gyro, &accel);
+        ahrs.update_imu(gyro, accel);
 
         let mut expected_ahrs = Mahony::default();
-        expected_ahrs.update_gyro(&gyro);
+        expected_ahrs.update_gyro(gyro);
 
         assert_relative_eq!(ahrs.quaternion, expected_ahrs.quaternion);
         assert_ne!(ahrs.quaternion, initial_quat);
@@ -253,7 +249,7 @@ mod tests {
         // Magnetometer pointing North (along X axis)
         let mag = Vector3::new(1.0, 0.0, 0.0);
         for _ in 0..2000 {
-            ahrs.update(&gyro, &accel, &mag);
+            ahrs.update(gyro, accel, mag);
         }
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
@@ -270,8 +266,8 @@ mod tests {
         let accel = Vector3::new(0.1, 0.2, 9.8);
         let mag = Vector3::new(0.0, 0.0, 0.0);
 
-        ahrs_update.update(&gyro, &accel, &mag);
-        ahrs_imu.update_imu(&gyro, &accel);
+        ahrs_update.update(gyro, accel, mag);
+        ahrs_imu.update_imu(gyro, accel);
 
         assert_relative_eq!(ahrs_update.quaternion, ahrs_imu.quaternion);
         assert_relative_eq!(ahrs_update.bias, ahrs_imu.bias);
@@ -286,8 +282,8 @@ mod tests {
         let accel = Vector3::new(0.0, 0.0, 0.0);
         let mag = Vector3::new(0.1, 0.2, 0.3);
 
-        ahrs_update.update(&gyro, &accel, &mag);
-        ahrs_gyro.update_gyro(&gyro);
+        ahrs_update.update(gyro, accel, mag);
+        ahrs_gyro.update_gyro(gyro);
 
         assert_relative_eq!(ahrs_update.quaternion, ahrs_gyro.quaternion);
         assert_relative_eq!(ahrs_update.bias, ahrs_gyro.bias);
@@ -301,7 +297,7 @@ mod tests {
         let mut ahrs = Mahony::new(0.01, 0.5, 0.001);
 
         for _ in 0..1000 {
-            ahrs.update(&gyro, &accel, &mag);
+            ahrs.update(gyro, accel, mag);
         }
 
         let (roll, pitch, yaw) = ahrs.quaternion.euler_angles();
