@@ -42,6 +42,10 @@ impl Madgwick {
 }
 
 impl Ahrs for Madgwick {
+    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
+        self.quaternion = quat;
+    }
+
     fn orientation(&self) -> UnitQuaternion<f32> {
         self.quaternion
     }
