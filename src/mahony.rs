@@ -54,6 +54,10 @@ impl Ahrs for Mahony {
         self.quaternion
     }
 
+    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
+        self.quaternion = quat;
+    }
+
     fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
         self.update_gyro_with_dt(gyroscope, self.dt)
     }
