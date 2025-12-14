@@ -1,0 +1,12 @@
+# List available recipes
+default:
+  @just --list
+
+alias b := build
+alias r := run
+
+build:
+  cargo build --release
+
+run:
+  cargo run --release

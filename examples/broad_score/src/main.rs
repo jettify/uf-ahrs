@@ -56,7 +56,7 @@ struct RmseScore {
     inclination: f32,
 }
 
-fn evaluate_dataset(df: &DataFrame, mut ahrs: impl Ahrs) -> Result<DataFrame, Box<dyn Error>> {
+fn evaluate_dataset(df: &DataFrame, ahrs: &mut impl Ahrs) -> Result<DataFrame, Box<dyn Error>> {
     let gyr_x = df.column("imu_gyr_x")?.cast(&DataType::Float32)?;
     let gyr_y = df.column("imu_gyr_y")?.cast(&DataType::Float32)?;
     let gyr_z = df.column("imu_gyr_z")?.cast(&DataType::Float32)?;

@@ -2,6 +2,10 @@
 default:
   @just --list
 
+alias b := build
+alias t := test
+alias l := lint
+
 # Run cargo doc and open result in browser
 [group('build')]
 doc:
