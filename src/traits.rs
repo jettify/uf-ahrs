@@ -10,9 +10,13 @@ pub trait Ahrs {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
-    ) -> ();
+    ) -> UnitQuaternion<f32>;
 
-    fn update_imu(&mut self, gyroscope: Vector3<f32>, accelerometer: Vector3<f32>) -> ();
+    fn update_imu(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32>;
 
-    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> ();
+    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32>;
 }
