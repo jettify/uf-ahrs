@@ -3,11 +3,6 @@ use core::f32;
 use crate::traits::Ahrs;
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
-// Coefficiens from VQF paper tuned on BROAD dataset.
-const DEFAULT_KP: f32 = 0.74;
-const DEFAULT_KI: f32 = 0.0012;
-const DEFAULT_SAMPLING_TIME: f32 = 0.01;
-
 #[derive(Debug)]
 pub struct Mahony {
     dt: f32,
@@ -21,9 +16,9 @@ impl Default for Mahony {
     fn default() -> Mahony {
         let quaternion = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         Mahony {
-            dt: DEFAULT_SAMPLING_TIME,
-            kp: DEFAULT_KP,
-            ki: DEFAULT_KI,
+            dt: (1.0f32) / (256.0f32),
+            kp: 0.5f32,
+            ki: 0.0f32,
             bias: Vector3::new(0.0, 0.0, 0.0),
             quaternion,
         }
@@ -63,11 +58,15 @@ impl Ahrs for Mahony {
         self.quaternion = quat;
     }
 
-    fn update_gyro(&mut self, gyroscope: Vector3<f32>) {
-        self.update_gyro_with_dt(gyroscope, self.dt);
+    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
+        self.update_gyro_with_dt(gyroscope, self.dt)
     }
 
-    fn update_imu(&mut self, gyroscope: Vector3<f32>, accelerometer: Vector3<f32>) {
+    fn update_imu(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
 
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
@@ -91,7 +90,7 @@ impl Ahrs for Mahony {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
-    ) {
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
         let two = 2.0;
 
