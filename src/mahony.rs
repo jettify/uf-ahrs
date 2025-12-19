@@ -4,8 +4,9 @@ use crate::traits::Ahrs;
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
 // Coefficiens from VQF paper tuned on BROAD dataset.
-const DEFAULT_KP: f32 = 0.74f32;
-const DEFAULT_KI: f32 = 0.0012f32;
+const DEFAULT_KP: f32 = 0.74;
+const DEFAULT_KI: f32 = 0.0012;
+const DEFAULT_SAMPLING_TIME: f32 = 0.01;
 
 #[derive(Debug)]
 pub struct Mahony {
@@ -20,7 +21,7 @@ impl Default for Mahony {
     fn default() -> Mahony {
         let quaternion = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         Mahony {
-            dt: (1.0f32) / (256.0f32),
+            dt: DEFAULT_SAMPLING_TIME,
             kp: DEFAULT_KP,
             ki: DEFAULT_KI,
             bias: Vector3::new(0.0, 0.0, 0.0),

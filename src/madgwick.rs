@@ -5,6 +5,7 @@ use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, V
 
 // Coefficiens from VQF paper tuned on BROAD dataset.
 const BETA: f32 = 0.05;
+const DEFAULT_SAMPLING_TIME: f32 = 0.01;
 
 #[derive(Debug)]
 pub struct Madgwick {
@@ -16,7 +17,7 @@ pub struct Madgwick {
 impl Default for Madgwick {
     fn default() -> Madgwick {
         Madgwick {
-            dt: (1.0f32) / (256.0),
+            dt: DEFAULT_SAMPLING_TIME,
             beta: BETA,
             quaternion: UnitQuaternion::new_unchecked(Quaternion::new(1.0f32, 0.0, 0.0, 0.0)),
         }
