@@ -1,4 +1,5 @@
 use core::f32;
+use core::time::Duration;
 
 use crate::traits::Ahrs;
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
@@ -26,14 +27,19 @@ impl Default for Mahony {
 }
 
 impl Mahony {
-    pub fn new(dt: f32, kp: f32, ki: f32) -> Self {
+    pub fn new(dt: Duration, kp: f32, ki: f32) -> Self {
         let quaternion = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         Mahony::new_with_quaternion(dt, kp, ki, quaternion)
     }
 
-    pub fn new_with_quaternion(dt: f32, kp: f32, ki: f32, quaternion: UnitQuaternion<f32>) -> Self {
+    pub fn new_with_quaternion(
+        dt: Duration,
+        kp: f32,
+        ki: f32,
+        quaternion: UnitQuaternion<f32>,
+    ) -> Self {
         Mahony {
-            dt,
+            dt: dt.as_secs_f32(),
             kp,
             ki,
             bias: Vector3::new(0.0, 0.0, 0.0),
@@ -148,7 +154,8 @@ mod tests {
 
     #[test]
     fn test_gyro_roll_estimation() {
-        let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
+        let dt = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
@@ -164,7 +171,8 @@ mod tests {
 
     #[test]
     fn test_gyro_pitch_estimation() {
-        let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
+        let dt = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -174,7 +182,8 @@ mod tests {
 
     #[test]
     fn test_gyro_yaw_estimation() {
-        let mut ahrs = Mahony::new(0.1, 0.0, 0.0);
+        let dt = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -198,7 +207,8 @@ mod tests {
 
     #[test]
     fn test_imu_pitch_45() {
-        let mut ahrs = Mahony::new(0.01, 0.5, 0.0);
+        let dt = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg pitch, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -216,7 +226,8 @@ mod tests {
 
     #[test]
     fn test_imu_roll_45() {
-        let mut ahrs = Mahony::new(0.01, 0.5, 0.0);
+        let dt = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg roll, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -251,7 +262,8 @@ mod tests {
 
     #[test]
     fn test_update_level() {
-        let mut ahrs = Mahony::new(0.01, 0.5, 0.0);
+        let dt = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         // Magnetometer pointing North (along X axis)
@@ -267,8 +279,9 @@ mod tests {
 
     #[test]
     fn test_update_zero_magnetometer() {
-        let mut ahrs_update = Mahony::new(0.01, 0.5, 0.0);
-        let mut ahrs_imu = Mahony::new(0.01, 0.5, 0.0);
+        let dt = Duration::from_millis(10);
+        let mut ahrs_update = Mahony::new(dt, 0.5, 0.0);
+        let mut ahrs_imu = Mahony::new(dt, 0.5, 0.0);
 
         let gyro = Vector3::new(0.01, 0.02, 0.03);
         let accel = Vector3::new(0.1, 0.2, 9.8);
@@ -283,8 +296,9 @@ mod tests {
 
     #[test]
     fn test_update_zero_accelerometer() {
-        let mut ahrs_update = Mahony::new(0.01, 0.5, 0.0);
-        let mut ahrs_gyro = Mahony::new(0.01, 0.5, 0.0);
+        let dt = Duration::from_millis(10);
+        let mut ahrs_update = Mahony::new(dt, 0.5, 0.0);
+        let mut ahrs_gyro = Mahony::new(dt, 0.5, 0.0);
 
         let gyro = Vector3::new(0.01, 0.02, 0.03);
         let accel = Vector3::new(0.0, 0.0, 0.0);
@@ -299,10 +313,11 @@ mod tests {
 
     #[test]
     fn test_update_yaw_90() {
+        let dt = Duration::from_millis(10);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         let mag = Vector3::new(0.0, -1.0, 0.0);
-        let mut ahrs = Mahony::new(0.01, 0.5, 0.001);
+        let mut ahrs = Mahony::new(dt, 0.5, 0.001);
 
         for _ in 0..1000 {
             ahrs.update(gyro, accel, mag);
