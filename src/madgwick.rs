@@ -4,37 +4,51 @@ use core::time::Duration;
 use crate::traits::Ahrs;
 use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4, Vector6};
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MadgwickParams {
+    pub beta: f32,
+}
+
+impl Default for MadgwickParams {
+    fn default() -> Self {
+        Self { beta: 0.05 }
+    }
+}
+
 #[derive(Debug)]
 pub struct Madgwick {
     dt: f32,
-    beta: f32,
+    params: MadgwickParams,
     quaternion: UnitQuaternion<f32>,
 }
 
 impl Default for Madgwick {
     fn default() -> Madgwick {
-        Madgwick {
-            dt: (1.0f32) / (256.0),
-            beta: 0.1f32,
-            quaternion: UnitQuaternion::new_unchecked(Quaternion::new(1.0f32, 0.0, 0.0, 0.0)),
-        }
+        Madgwick::new(
+            Duration::from_secs_f32(1.0 / 256.0),
+            MadgwickParams::default(),
+        )
     }
 }
 
 impl Madgwick {
-    pub fn new(dt: Duration, beta: f32) -> Self {
-        Madgwick::new_with_quat(
-            dt,
-            beta,
+    pub fn new(sample_period: Duration, params: MadgwickParams) -> Self {
+        Madgwick::new_with_orientation(
+            sample_period,
+            params,
             UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0)),
         )
     }
 
-    pub fn new_with_quat(dt: Duration, beta: f32, quaternion: UnitQuaternion<f32>) -> Self {
+    pub fn new_with_orientation(
+        sample_period: Duration,
+        params: MadgwickParams,
+        orientation: UnitQuaternion<f32>,
+    ) -> Self {
         Madgwick {
-            dt: dt.as_secs_f32(),
-            beta,
-            quaternion,
+            dt: sample_period.as_secs_f32(),
+            params,
+            quaternion: orientation,
         }
     }
 }
@@ -124,7 +138,7 @@ impl Ahrs for Madgwick {
             return self.update_gyro(gyroscope);
         };
         let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * half
-            - Quaternion::new(step[0], step[1], step[2], step[3]) * self.beta;
+            - Quaternion::new(step[0], step[1], step[2], step[3]) * self.params.beta;
         self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
         self.quaternion
     }
@@ -171,7 +185,7 @@ impl Ahrs for Madgwick {
             return self.update_gyro(gyroscope);
         };
         let q_dot = (q * Quaternion::from_parts(0.0, gyroscope)) * half
-            - Quaternion::new(step[0], step[1], step[2], step[3]) * self.beta;
+            - Quaternion::new(step[0], step[1], step[2], step[3]) * self.params.beta;
         self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
         self.quaternion
     }
@@ -205,8 +219,8 @@ mod tests {
 
     #[test]
     fn test_gyro_roll_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Madgwick::new(dt, 0.1);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Madgwick::new(sample_period, MadgwickParams::default());
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
@@ -222,8 +236,8 @@ mod tests {
 
     #[test]
     fn test_gyro_pitch_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Madgwick::new(dt, 0.1);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Madgwick::new(sample_period, MadgwickParams::default());
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -233,8 +247,8 @@ mod tests {
 
     #[test]
     fn test_gyro_yaw_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Madgwick::new(dt, 0.0);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Madgwick::new(sample_period, MadgwickParams::default());
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);

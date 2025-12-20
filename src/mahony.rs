@@ -4,46 +4,54 @@ use core::time::Duration;
 use crate::traits::Ahrs;
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MahonyParams {
+    pub kp: f32,
+    pub ki: f32,
+}
+
+impl Default for MahonyParams {
+    fn default() -> Self {
+        Self {
+            kp: 0.74,
+            ki: 0.0012,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Mahony {
     dt: f32,
-    kp: f32,
-    ki: f32,
+    params: MahonyParams,
     pub bias: Vector3<f32>,
     quaternion: UnitQuaternion<f32>,
 }
 
 impl Default for Mahony {
     fn default() -> Mahony {
-        let quaternion = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
-        Mahony {
-            dt: (1.0f32) / (256.0f32),
-            kp: 0.5f32,
-            ki: 0.0f32,
-            bias: Vector3::new(0.0, 0.0, 0.0),
-            quaternion,
-        }
+        Mahony::new(
+            Duration::from_secs_f32(1.0 / 256.0),
+            MahonyParams::default(),
+        )
     }
 }
 
 impl Mahony {
-    pub fn new(dt: Duration, kp: f32, ki: f32) -> Self {
-        let quaternion = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
-        Mahony::new_with_quaternion(dt, kp, ki, quaternion)
+    pub fn new(sample_period: Duration, params: MahonyParams) -> Self {
+        let orientation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
+        Mahony::new_with_orientation(sample_period, params, orientation)
     }
 
-    pub fn new_with_quaternion(
-        dt: Duration,
-        kp: f32,
-        ki: f32,
-        quaternion: UnitQuaternion<f32>,
+    pub fn new_with_orientation(
+        sample_period: Duration,
+        params: MahonyParams,
+        orientation: UnitQuaternion<f32>,
     ) -> Self {
         Mahony {
-            dt: dt.as_secs_f32(),
-            kp,
-            ki,
+            dt: sample_period.as_secs_f32(),
+            params,
             bias: Vector3::new(0.0, 0.0, 0.0),
-            quaternion,
+            quaternion: orientation,
         }
     }
 
@@ -85,9 +93,9 @@ impl Ahrs for Mahony {
         );
 
         let e = accel.cross(&v);
-        let b_dot = -self.ki * e;
+        let b_dot = -self.params.ki * e;
         self.bias += b_dot * self.dt;
-        let corrected = gyroscope + e * self.kp - self.bias;
+        let corrected = gyroscope + e * self.params.kp - self.bias;
         self.update_gyro(corrected)
     }
 
@@ -126,10 +134,10 @@ impl Ahrs for Mahony {
         );
 
         let e: Vector3<f32> = accel.cross(&v) + mag.cross(&w);
-        let b_dot = -self.ki * e;
+        let b_dot = -self.params.ki * e;
         self.bias += b_dot * self.dt;
 
-        let corrected = gyroscope + e * self.kp - self.bias;
+        let corrected = gyroscope + e * self.params.kp - self.bias;
         self.update_gyro(corrected)
     }
 }
@@ -154,8 +162,8 @@ mod tests {
 
     #[test]
     fn test_gyro_roll_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
@@ -171,8 +179,8 @@ mod tests {
 
     #[test]
     fn test_gyro_pitch_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -182,8 +190,8 @@ mod tests {
 
     #[test]
     fn test_gyro_yaw_estimation() {
-        let dt = Duration::from_millis(100);
-        let mut ahrs = Mahony::new(dt, 0.0, 0.0);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
         let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -207,8 +215,8 @@ mod tests {
 
     #[test]
     fn test_imu_pitch_45() {
-        let dt = Duration::from_millis(10);
-        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
+        let sample_period = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg pitch, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -226,8 +234,8 @@ mod tests {
 
     #[test]
     fn test_imu_roll_45() {
-        let dt = Duration::from_millis(10);
-        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
+        let sample_period = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg roll, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -262,8 +270,8 @@ mod tests {
 
     #[test]
     fn test_update_level() {
-        let dt = Duration::from_millis(10);
-        let mut ahrs = Mahony::new(dt, 0.5, 0.0);
+        let sample_period = Duration::from_millis(10);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         // Magnetometer pointing North (along X axis)
@@ -279,9 +287,10 @@ mod tests {
 
     #[test]
     fn test_update_zero_magnetometer() {
-        let dt = Duration::from_millis(10);
-        let mut ahrs_update = Mahony::new(dt, 0.5, 0.0);
-        let mut ahrs_imu = Mahony::new(dt, 0.5, 0.0);
+        let sample_period = Duration::from_millis(10);
+        let params = MahonyParams::default();
+        let mut ahrs_update = Mahony::new(sample_period, params);
+        let mut ahrs_imu = Mahony::new(sample_period, params);
 
         let gyro = Vector3::new(0.01, 0.02, 0.03);
         let accel = Vector3::new(0.1, 0.2, 9.8);
@@ -296,9 +305,10 @@ mod tests {
 
     #[test]
     fn test_update_zero_accelerometer() {
-        let dt = Duration::from_millis(10);
-        let mut ahrs_update = Mahony::new(dt, 0.5, 0.0);
-        let mut ahrs_gyro = Mahony::new(dt, 0.5, 0.0);
+        let sample_period = Duration::from_millis(10);
+        let params = MahonyParams::default();
+        let mut ahrs_update = Mahony::new(sample_period, params);
+        let mut ahrs_gyro = Mahony::new(sample_period, params);
 
         let gyro = Vector3::new(0.01, 0.02, 0.03);
         let accel = Vector3::new(0.0, 0.0, 0.0);
@@ -313,11 +323,11 @@ mod tests {
 
     #[test]
     fn test_update_yaw_90() {
-        let dt = Duration::from_millis(10);
+        let sample_period = Duration::from_millis(10);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         let accel = Vector3::new(0.0, 0.0, 9.81);
         let mag = Vector3::new(0.0, -1.0, 0.0);
-        let mut ahrs = Mahony::new(dt, 0.5, 0.001);
+        let mut ahrs = Mahony::new(sample_period, MahonyParams::default());
 
         for _ in 0..1000 {
             ahrs.update(gyro, accel, mag);
