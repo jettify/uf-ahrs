@@ -69,6 +69,7 @@ impl Ahrs for Mahony {
     }
 
     fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
+        self.bias = Vector3::new(0.0, 0.0, 0.0);
         self.quaternion = quat;
     }
 

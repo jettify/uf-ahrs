@@ -5,6 +5,7 @@ default:
 alias b := build
 alias t := test
 alias l := lint
+alias e := eval
 
 # Run cargo doc and open result in browser
 [group('build')]
@@ -74,3 +75,8 @@ ci:
   cargo build --verbose
   cargo test --all-features --verbose
   cargo test --examples
+
+# Executes evaluation logic agains BROAD dataset
+[group('test')]
+eval:
+  @just --justfile examples/broad_score/justfile r

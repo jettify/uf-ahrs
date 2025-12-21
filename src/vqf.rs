@@ -242,7 +242,7 @@ fn gain_from_tau(tau: Duration, t_s: Duration) -> f32 {
 
 impl Vqf {
     #[must_use]
-    pub fn new(
+    pub fn new_with_sensor_rates(
         gyro_sampling_rate: Duration,
         accel_sampling_rate: Duration,
         mag_sampling_rate: Duration,
@@ -284,8 +284,8 @@ impl Vqf {
             state: VqfState::new(
                 &coefficients,
                 &params,
-                accel_sampling_rate,
                 gyro_sampling_rate,
+                accel_sampling_rate,
                 mag_sampling_rate,
             ),
             coefficients,
@@ -295,6 +295,45 @@ impl Vqf {
             mag_rate: mag_sampling_rate,
         }
     }
+
+    #[must_use]
+    pub fn new(sample_period: Duration, params: VqfParameters) -> Self {
+        Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params)
+    }
+
+    #[must_use]
+    pub fn new_with_orientation(
+        sample_period: Duration,
+        params: VqfParameters,
+        orientation: UnitQuaternion<f32>,
+    ) -> Self {
+        Vqf::new_with_sensor_rates_and_orientation(
+            sample_period,
+            sample_period,
+            sample_period,
+            params,
+            orientation,
+        )
+    }
+
+    #[must_use]
+    pub fn new_with_sensor_rates_and_orientation(
+        gyro_sampling_rate: Duration,
+        accel_sampling_rate: Duration,
+        mag_sampling_rate: Duration,
+        params: VqfParameters,
+        orientation: UnitQuaternion<f32>,
+    ) -> Self {
+        let mut vqf = Vqf::new_with_sensor_rates(
+            gyro_sampling_rate,
+            accel_sampling_rate,
+            mag_sampling_rate,
+            params,
+        );
+        vqf.state.gyroscope = orientation;
+        vqf
+    }
+
     #[inline]
     #[must_use]
     pub fn is_rest_phase(&self) -> bool {
@@ -693,6 +732,12 @@ impl Vqf {
     }
 }
 
+impl Default for Vqf {
+    fn default() -> Self {
+        Vqf::new(Duration::from_millis(10), VqfParameters::default())
+    }
+}
+
 impl Ahrs for Vqf {
     fn orientation(&self) -> UnitQuaternion<f32> {
         self.heading_orientation()
@@ -738,8 +783,9 @@ mod tests {
     #[test]
     fn test_zero_rotation() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(10);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(10);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
 
         let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
         ahrs.gyroscope_update(gyro);
@@ -753,8 +799,9 @@ mod tests {
     #[test]
     fn test_gyro_roll_estimation() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(100);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
 
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
@@ -772,8 +819,9 @@ mod tests {
     #[test]
     fn test_gyro_pitch_estimation() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(100);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
         let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -784,8 +832,9 @@ mod tests {
     #[test]
     fn test_gyro_yaw_estimation() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(100);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
         let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
@@ -796,8 +845,9 @@ mod tests {
     #[test]
     fn test_imu_pitch_45() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(100);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg pitch, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -816,8 +866,9 @@ mod tests {
     #[test]
     fn test_imu_roll_45() {
         let params = VqfParameters::default();
-        let imu_sample_rate = Duration::from_millis(100);
-        let mut ahrs = Vqf::new(imu_sample_rate, imu_sample_rate, imu_sample_rate, params);
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         let gyro = Vector3::new(0.0, 0.0, 0.0);
         // Corresponds to 45 deg roll, assuming gravity is (0, 0, 1)
         let rad_45 = core::f32::consts::FRAC_PI_4;
@@ -833,3 +884,4 @@ mod tests {
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
     }
 }
+
