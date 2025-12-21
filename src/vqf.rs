@@ -884,4 +884,3 @@ mod tests {
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
     }
 }
-
