@@ -1,12 +1,15 @@
 use core::f32;
+use core::time::Duration;
 use glob::glob;
 use polars::prelude::*;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::path::PathBuf;
 use uf_ahrs::Ahrs;
-use uf_ahrs::Madgwick;
-use uf_ahrs::Mahony;
+use uf_ahrs::{Madgwick, MadgwickParams};
+use uf_ahrs::{Mahony, MahonyParams};
+use uf_ahrs::{Vqf, VqfParameters};
 
 use itertools::izip;
 use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector3};
@@ -56,7 +59,10 @@ struct RmseScore {
     inclination: f32,
 }
 
-fn evaluate_dataset(df: &DataFrame, ahrs: &mut impl Ahrs) -> Result<DataFrame, Box<dyn Error>> {
+fn evaluate_dataset(
+    df: &DataFrame,
+    ahrs: &mut (impl Ahrs + ?Sized),
+) -> Result<DataFrame, Box<dyn Error>> {
     let gyr_x = df.column("imu_gyr_x")?.cast(&DataType::Float32)?;
     let gyr_y = df.column("imu_gyr_y")?.cast(&DataType::Float32)?;
     let gyr_z = df.column("imu_gyr_z")?.cast(&DataType::Float32)?;
@@ -146,6 +152,7 @@ fn evaluate_dataset(df: &DataFrame, ahrs: &mut impl Ahrs) -> Result<DataFrame, B
             let mag = Vector3::new(mx, my, mz);
 
             ahrs.update(gyro, acc, mag);
+            //ahrs.update_imu(gyro, acc);
             let quaternion = ahrs.orientation();
 
             quat_w_values.push(quaternion.w);
@@ -248,34 +255,67 @@ fn analyze_results(df: &DataFrame) -> Result<RmseScore, Box<dyn Error>> {
     })
 }
 
+#[derive(Debug, Copy, Clone)]
+enum Algorithm {
+    Madgwick,
+    Mahony,
+    Vqf,
+}
+
+fn make_ahrs(algorithm: Algorithm, sample_period: Duration) -> Box<dyn Ahrs> {
+    match algorithm {
+        Algorithm::Mahony => Box::new(Mahony::new(sample_period, MahonyParams::default())),
+        Algorithm::Madgwick => Box::new(Madgwick::new(sample_period, MadgwickParams::default())),
+        Algorithm::Vqf => {
+            let params = VqfParameters::default();
+            Box::new(Vqf::new(sample_period, params))
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut paths: Vec<PathBuf> = glob("data/*.parquet")?.filter_map(Result::ok).collect();
     paths.sort();
 
-    let mut scores: Vec<RmseScore> = Vec::new();
-    let dt: f32 = 0.0035;
+    let dt = Duration::from_secs_f32(0.0035);
 
-    for entry in paths {
-        let file = File::open(&entry).unwrap();
-        let df = ParquetReader::new(file).finish()?;
+    let algorithms_to_test = [
+        ("Mahony", Algorithm::Mahony),
+        ("Madgwick", Algorithm::Madgwick),
+        ("Vqf", Algorithm::Vqf),
+    ];
 
-        //let ahrs = Madgwick::new(dt, 0.05);
-        let ahrs = Mahony::new(dt, 0.74, 0.0012);
-        let result_df = evaluate_dataset(&df, ahrs).unwrap();
-        let score = analyze_results(&result_df).unwrap();
-        println!("{:?} {:?}", score, &entry);
-        scores.push(score);
+    let mut all_scores: HashMap<&str, Vec<RmseScore>> = HashMap::new();
+
+    for (name, algo) in algorithms_to_test {
+        println!("Evaluating {}...", name);
+        let mut ahrs = make_ahrs(algo, dt);
+        let mut scores = Vec::new();
+        for entry in &paths {
+            let file = File::open(entry)?;
+            let df = ParquetReader::new(file).finish()?;
+            let result_df = evaluate_dataset(&df, ahrs.as_mut())?;
+            let score = analyze_results(&result_df)?;
+            scores.push(score);
+        }
+        all_scores.insert(name, scores);
     }
 
-    let count = scores.len();
-    let mean_rmse: f32 = scores.iter().map(|s| s.total).sum::<f32>() / (count as f32);
-    let mean_heading_rmse: f32 = scores.iter().map(|s| s.heading).sum::<f32>() / (count as f32);
-    let heading_inclination_sum: f32 =
-        scores.iter().map(|s| s.inclination).sum::<f32>() / (count as f32);
+    for (name, scores) in &all_scores {
+        let count = scores.len();
+        if count == 0 {
+            continue;
+        }
+        let mean_total: f32 = scores.iter().map(|s| s.total).sum::<f32>() / (count as f32);
+        let mean_heading: f32 = scores.iter().map(|s| s.heading).sum::<f32>() / (count as f32);
+        let mean_inclination: f32 =
+            scores.iter().map(|s| s.inclination).sum::<f32>() / (count as f32);
 
-    println!("AVG Total RMSE: {}", mean_rmse);
-    println!("AVG Headingt RMSE: {}", mean_heading_rmse);
-    println!("AVG inclination RMSE: {}", heading_inclination_sum);
+        println!("Algorithm: {}", name);
+        println!("  AVG Total RMSE:       {:.4} deg", mean_total);
+        println!("  AVG Heading RMSE:     {:.4} deg", mean_heading);
+        println!("  AVG Inclination RMSE: {:.4} deg", mean_inclination);
+    }
 
     Ok(())
 }
