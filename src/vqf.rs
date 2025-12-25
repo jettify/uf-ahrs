@@ -54,37 +54,37 @@ impl VqfState {
             magnetometer_k_init: 1.0,
             last_magnetometer_disagreement_angle: 0.0,
             last_magnetometer_correction_angular_rate: 0.0,
-            accelerometer_low_pass: MeanInitializedLowPassFilter::new(
+            accelerometer_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.tau_accelerometer,
                 accel_rate,
                 coefficients.accel_b,
                 coefficients.accel_a,
             ),
-            rest_gyro_low_pass: MeanInitializedLowPassFilter::new(
+            rest_gyro_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.rest_filter_tau,
                 gyro_rate,
                 coefficients.rest_gyro_b,
                 coefficients.rest_gyro_a,
             ),
-            rest_accel_low_pass: MeanInitializedLowPassFilter::new(
+            rest_accel_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.rest_filter_tau,
                 accel_rate,
                 coefficients.rest_accel_b,
                 coefficients.rest_accel_a,
             ),
-            motion_bias_estimate_rotation_low_pass: MeanInitializedLowPassFilter::new(
+            motion_bias_estimate_rotation_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.tau_accelerometer,
                 accel_rate,
                 coefficients.accel_b,
                 coefficients.accel_a,
             ),
-            motion_bias_estimate_low_pass: MeanInitializedLowPassFilter::new(
+            motion_bias_estimate_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.tau_accelerometer,
                 accel_rate,
                 coefficients.accel_b,
                 coefficients.accel_a,
             ),
-            magnetometer_norm_dip_low_pass: MeanInitializedLowPassFilter::new(
+            magnetometer_norm_dip_low_pass: MeanInitializedLowPassFilter::with_coeffs(
                 params.magnetometer_current_tau,
                 mag_rate,
                 coefficients.magnetometer_norm_dip_b,
@@ -691,35 +691,35 @@ impl Vqf {
         self.state.rest = None;
 
         // Reset all filter states
-        self.state.accelerometer_low_pass = MeanInitializedLowPassFilter::new(
+        self.state.accelerometer_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.tau_accelerometer,
             self.accel_rate,
             self.coefficients.accel_b,
             self.coefficients.accel_a,
         );
 
-        self.state.rest_gyro_low_pass = MeanInitializedLowPassFilter::new(
+        self.state.rest_gyro_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.rest_filter_tau,
             self.gyro_rate,
             self.coefficients.rest_gyro_b,
             self.coefficients.rest_gyro_a,
         );
 
-        self.state.rest_accel_low_pass = MeanInitializedLowPassFilter::new(
+        self.state.rest_accel_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.rest_filter_tau,
             self.accel_rate,
             self.coefficients.rest_accel_b,
             self.coefficients.rest_accel_a,
         );
 
-        self.state.motion_bias_estimate_rotation_low_pass = MeanInitializedLowPassFilter::new(
+        self.state.motion_bias_estimate_rotation_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.tau_accelerometer,
             self.accel_rate,
             self.coefficients.accel_b,
             self.coefficients.accel_a,
         );
 
-        self.state.motion_bias_estimate_low_pass = MeanInitializedLowPassFilter::new(
+        self.state.motion_bias_estimate_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.tau_accelerometer,
             self.accel_rate,
             self.coefficients.accel_b,
