@@ -17,7 +17,12 @@ pub struct MeanInitializedLowPassFilter<const N: usize, const M: usize> {
 }
 
 impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
-    pub fn new(tau: Duration, sampling_rate: Duration, b: [f32; 3], a: [f32; 2]) -> Self {
+    pub fn new(tau: Duration, sampling_rate: Duration) -> Self {
+        let (b, a) = second_order_butterworth(tau, sampling_rate);
+        Self::with_coeffs(tau, sampling_rate, b, a)
+    }
+
+    pub fn with_coeffs(tau: Duration, sampling_rate: Duration, b: [f32; 3], a: [f32; 2]) -> Self {
         let biquad = Biquad::from([b[0], b[1], b[2], a[0], a[1]]);
 
         Self {
@@ -38,9 +43,10 @@ impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
             return self.filter_arithmetic_mean(x);
         }
 
-        let y = self.state[0] + x * self.biquad.ba()[0];
-        self.state[0] = self.state[1] + x * self.biquad.ba()[1] - y * self.biquad.ba()[3];
-        self.state[1] = x * self.biquad.ba()[2] - y * self.biquad.ba()[4];
+        let &[b0, b1, b2, a1, a2] = self.biquad.ba();
+        let y = self.state[0] + x * b0;
+        self.state[0] = self.state[1] + x * b1 - y * a1;
+        self.state[1] = x * b2 - y * a2;
         self.last_output = y;
         y
     }
@@ -128,8 +134,7 @@ mod tests {
     fn test_filter_initialization() {
         let tau = Duration::from_secs_f32(0.1);
         let sampling_rate = Duration::from_secs_f32(0.05);
-        let (b, a) = second_order_butterworth(tau, sampling_rate);
-        let mut filter = MeanInitializedLowPassFilter::<1, 1>::new(tau, sampling_rate, b, a);
+        let mut filter = MeanInitializedLowPassFilter::<1, 1>::new(tau, sampling_rate);
 
         assert!(!filter.initialized);
         assert_eq!(filter.sample_count, 0);
@@ -154,8 +159,7 @@ mod tests {
     fn test_filter_after_initialization() {
         let tau = Duration::from_secs_f32(0.1);
         let sampling_rate = Duration::from_secs_f32(0.01);
-        let (b, a) = second_order_butterworth(tau, sampling_rate);
-        let mut filter = MeanInitializedLowPassFilter::<1, 1>::new(tau, sampling_rate, b, a);
+        let mut filter = MeanInitializedLowPassFilter::<1, 1>::new(tau, sampling_rate);
 
         // Initialize filter
         for i in 0..11 {
