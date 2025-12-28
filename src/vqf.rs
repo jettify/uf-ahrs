@@ -347,13 +347,6 @@ impl Vqf {
         self.state.accelerometer * self.state.gyroscope
     }
 
-    pub fn quaternion(&self) -> UnitQuaternion<f32> {
-        self.state.accelerometer * self.state.gyroscope
-    }
-    pub fn quaternion2(&self) -> UnitQuaternion<f32> {
-        self.state.gyroscope
-    }
-
     #[must_use]
     pub fn heading_orientation(&self) -> UnitQuaternion<f32> {
         let heading_quat = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), self.state.delta);
@@ -712,12 +705,13 @@ impl Vqf {
             self.coefficients.rest_accel_a,
         );
 
-        self.state.motion_bias_estimate_rotation_low_pass = MeanInitializedLowPassFilter::with_coeffs(
-            self.parameters.tau_accelerometer,
-            self.accel_rate,
-            self.coefficients.accel_b,
-            self.coefficients.accel_a,
-        );
+        self.state.motion_bias_estimate_rotation_low_pass =
+            MeanInitializedLowPassFilter::with_coeffs(
+                self.parameters.tau_accelerometer,
+                self.accel_rate,
+                self.coefficients.accel_b,
+                self.coefficients.accel_a,
+            );
 
         self.state.motion_bias_estimate_low_pass = MeanInitializedLowPassFilter::with_coeffs(
             self.parameters.tau_accelerometer,
@@ -804,13 +798,13 @@ mod tests {
             Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
 
         ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
 
         ahrs.update_gyro(Vector3::new(-0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -823,7 +817,7 @@ mod tests {
         let mut ahrs =
             Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.05, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
@@ -836,7 +830,7 @@ mod tests {
         let mut ahrs =
             Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
         ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
         assert_relative_eq!(yaw, 0.05, epsilon = 0.0001);
@@ -857,7 +851,7 @@ mod tests {
             ahrs.update_imu(gyro, accel);
         }
 
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, 0.0, epsilon = 0.01);
         assert_relative_eq!(pitch, rad_45, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
@@ -878,7 +872,7 @@ mod tests {
             ahrs.update_imu(gyro, accel);
         }
 
-        let (roll, pitch, yaw) = ahrs.quaternion().euler_angles();
+        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
         assert_relative_eq!(roll, rad_45, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
