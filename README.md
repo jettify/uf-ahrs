@@ -61,9 +61,9 @@ fn main() {
     let q_madgwick = madgwick.orientation();
     let q_vqf = vqf.orientation();
 
-    println!("Mahony: {:#?}", q_mahony.euler_angles());
-    println!("Mahony: {:#?}", q_madgwick.euler_angles());
-    println!("Mahony: {:#?}", q_vqf.euler_angles());
+    println!("Mahony:   {:?}", q_mahony.euler_angles());
+    println!("Madgwick: {:?}", q_madgwick.euler_angles());
+    println!("VQF:      {:?}", q_vqf.euler_angles());
 }
 ```
 
@@ -77,27 +77,27 @@ This library incorporates ideas and data from the following projects and publica
 
 ### Publications
 
-- **BROAD—A benchmark for robust inertial orientation estimation**
+- _**BROAD - A benchmark for robust inertial orientation estimation**_
   D. Laidig, M. Caruso, A. Cereatti, and T. Seel, *Data*, vol. 6, no. 7, p. 72, 2021.
 
-- **Nonlinear complementary filters on the special orthogonal group**
+- _**Nonlinear complementary filters on the special orthogonal group**_
   R. Mahony, T. Hamel, and J.-M. Pflimlin, *IEEE Transactions on Automatic Control*, vol. 53, no. 5, pp. 1203–1218, 2008.
 
-- **An efficient orientation filter for inertial and inertial/magnetic sensor arrays**
+- _**An efficient orientation filter for inertial and inertial/magnetic sensor arrays**_
   S. O. H. Madgwick et al., 2010.
 
-- **VQF: Highly accurate IMU orientation estimation with bias estimation and magnetic disturbance rejection**
+- _**VQF: Highly accurate IMU orientation estimation with bias estimation and magnetic disturbance rejection**_
   D. Laidig and T. Seel, *Information Fusion*, vol. 91, pp. 187–204, 2023.
 
 ### Related Projects
 
-- **ahrs-rs**: Alternative Mahony and Madgwick filter implementation in Rust.
+- **ahrs-rs**: alternative Mahony and Madgwick filter implementation in Rust.
   [https://github.com/jmagnuson/ahrs-rs](https://github.com/jmagnuson/ahrs-rs)
 
-- **vqf-rs**: Alternative VQF filter implementation in Rust.
+- **vqf-rs**: alternative VQF filter implementation in Rust.
   [https://github.com/vgskye/vqf-rs](https://github.com/vgskye/vqf-rs)
 
-- **vqf**: Another VQF filter implementation in Rust.
+- **vqf**: another VQF filter implementation in Rust.
   [https://github.com/oxkitsune/vqf](https://github.com/oxkitsune/vqf)
 
 - **broad**: Berlin Robust Orientation Estimation Assessment Dataset (BROAD).

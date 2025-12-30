@@ -23,7 +23,7 @@ fn main() {
     let q_madgwick = madgwick.orientation();
     let q_vqf = vqf.orientation();
 
-    println!("Mahony: {:#?}", q_mahony.euler_angles());
-    println!("Mahony: {:#?}", q_madgwick.euler_angles());
-    println!("Mahony: {:#?}", q_vqf.euler_angles());
+    println!("Mahony:   {:?}", q_mahony.euler_angles());
+    println!("Madgwick: {:?}", q_madgwick.euler_angles());
+    println!("VQF:      {:?}", q_vqf.euler_angles());
 }

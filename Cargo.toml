@@ -3,6 +3,15 @@ name = "uf-ahrs"
 version = "0.1.0"
 edition = "2024"
 
+description = "uf-ahrs  library for attitude and heading estimation using gyroscope, accelerometer and magnetometer."
+keywords = ["ahrs", "imu", "madgwick", "mahony", "vqf"]
+categories = ["embedded", "no-std"]
+authors = ["Nickolai Novik <nickolainovik@gmail.com>"]
+license = "Apache-2.0"
+homepage = "https://github.com/jettify/uf-ahrs"
+repository = "https://github.com/jettify/uf-ahrs"
+readme = "README.md"
+
 [dependencies]
 idsp = "0.19.0"
 libm = "0.2.15"
