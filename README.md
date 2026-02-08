@@ -3,7 +3,7 @@
 [![CI](https://github.com/jettify/uf-ahrs/actions/workflows/CI.yml/badge.svg)](https://github.com/jettify/uf-ahrs/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/jettify/uf-ahrs/graph/badge.svg?token=2N16CN1OZX)](https://codecov.io/gh/jettify/uf-ahrs)
 [![crates.io](https://img.shields.io/crates/v/uf-ahrs)](https://crates.io/crates/uf-ahrs)
-[![docs.rs](https://img.shields.io/docsrs/uf-ahrs)](https://docs.rs/uf-ahrs/latest/uf_crsf/)
+[![docs.rs](https://img.shields.io/docsrs/uf-ahrs)](https://docs.rs/uf-ahrs/latest/uf_ahrs/)
 
 `uf-ahrs` rust `no_std` library for orientation estimation using gyroscope, accelerometer and magnetometer.
 

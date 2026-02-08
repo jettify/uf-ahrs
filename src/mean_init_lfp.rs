@@ -92,6 +92,11 @@ impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
 }
 
 pub fn second_order_butterworth(tau: Duration, sampling_time: Duration) -> ([f32; 3], [f32; 2]) {
+    if tau.is_zero() {
+        // Passthrough filter.
+        return ([1.0, 0.0, 0.0], [0.0, 0.0]);
+    }
+
     let tau = tau.as_secs_f32();
     let sampling_time = sampling_time.as_secs_f32();
 
@@ -190,5 +195,24 @@ mod tests {
 
         assert_relative_eq!(state[0][(0, 0)], 2.0 * (1.0 - 0.1), epsilon = 1e-6);
         assert_relative_eq!(state[1][(0, 0)], 2.0 * (0.3 - 0.6), epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_tau_zero_passthrough() {
+        let tau = Duration::from_secs(0);
+        let sampling_time = Duration::from_secs_f32(0.01);
+        let (b, a) = second_order_butterworth(tau, sampling_time);
+
+        assert_relative_eq!(b[0], 1.0, epsilon = 1e-6);
+        assert_relative_eq!(b[1], 0.0, epsilon = 1e-6);
+        assert_relative_eq!(b[2], 0.0, epsilon = 1e-6);
+        assert_relative_eq!(a[0], 0.0, epsilon = 1e-6);
+        assert_relative_eq!(a[1], 0.0, epsilon = 1e-6);
+
+        let mut filter = MeanInitializedLowPassFilter::<1, 1>::new(tau, sampling_time);
+        let input = SMatrix::<f32, 1, 1>::from_element(3.25);
+        let output = filter.filter(input);
+
+        assert_relative_eq!(output[(0, 0)], 3.25, epsilon = 1e-6);
     }
 }
