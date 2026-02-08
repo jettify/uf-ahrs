@@ -776,112 +776,7 @@ impl Ahrs for Vqf {
 mod tests {
     extern crate std;
     use super::*;
-    use approx::assert_abs_diff_eq;
     use approx::assert_relative_eq;
-
-    #[test]
-    fn test_zero_rotation() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(10);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-
-        let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
-        ahrs.gyroscope_update(gyro);
-
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_abs_diff_eq!(roll, 0.0);
-        assert_abs_diff_eq!(pitch, 0.0);
-        assert_abs_diff_eq!(yaw, 0.0);
-    }
-
-    #[test]
-    fn test_gyro_roll_estimation() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(100);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-
-        ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, 0.05, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
-
-        ahrs.update_gyro(Vector3::new(-0.5f32, 0.0f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_gyro_pitch_estimation() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(100);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-        ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.05, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_gyro_yaw_estimation() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(100);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-        ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.0001);
-        assert_relative_eq!(yaw, 0.05, epsilon = 0.0001);
-    }
-
-    #[test]
-    fn test_imu_pitch_45() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(100);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-        let gyro = Vector3::new(0.0, 0.0, 0.0);
-        // Corresponds to 45 deg pitch, assuming gravity is (0, 0, 1)
-        let rad_45 = core::f32::consts::FRAC_PI_4;
-        let accel = Vector3::new(-rad_45.sin(), 0.0, rad_45.cos());
-
-        for _ in 0..1000 {
-            ahrs.update_imu(gyro, accel);
-        }
-
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, 0.0, epsilon = 0.01);
-        assert_relative_eq!(pitch, rad_45, epsilon = 0.01);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
-    }
-
-    #[test]
-    fn test_imu_roll_45() {
-        let params = VqfParameters::default();
-        let sample_period = Duration::from_millis(100);
-        let mut ahrs =
-            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
-        let gyro = Vector3::new(0.0, 0.0, 0.0);
-        // Corresponds to 45 deg roll, assuming gravity is (0, 0, 1)
-        let rad_45 = core::f32::consts::FRAC_PI_4;
-        let accel = Vector3::new(0.0, rad_45.sin(), rad_45.cos());
-
-        for _ in 0..1000 {
-            ahrs.update_imu(gyro, accel);
-        }
-
-        let (roll, pitch, yaw) = ahrs.orientation().euler_angles();
-        assert_relative_eq!(roll, rad_45, epsilon = 0.01);
-        assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
-        assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
-    }
 
     #[test]
     fn test_gyro_update_applies_bias() {
@@ -910,3 +805,4 @@ mod tests {
         assert_relative_eq!(ahrs.state.gyroscope, expected, epsilon = 1e-6);
     }
 }
+// Rest of tests live in `tests/ahrs_test.rs` to share coverage across algorithms.
