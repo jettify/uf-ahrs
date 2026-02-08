@@ -19,3 +19,4 @@ nalgebra = { version = "0.34.1", default-features = false, features = ["libm"] }
 
 [dev-dependencies]
 approx = "0.5.1"
+rstest = "0.26.1"
