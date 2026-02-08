@@ -67,6 +67,21 @@ fn main() {
 }
 ```
 
+```bash no_run
+Algorithm: Vqf
+  AVG Total RMSE:       2.0776 deg
+  AVG Heading RMSE:     1.9205 deg
+  AVG Inclination RMSE: 0.6963 deg
+Algorithm: Mahony
+  AVG Total RMSE:       7.4884 deg
+  AVG Heading RMSE:     6.2993 deg
+  AVG Inclination RMSE: 3.6971 deg
+Algorithm: Madgwick
+  AVG Total RMSE:       5.0831 deg
+  AVG Heading RMSE:     4.3588 deg
+  AVG Inclination RMSE: 2.3404 deg
+```
+
 ## License
 
 This project is licensed under the `Apache 2.0`. See the [LICENSE](https://github.com/jettify/uf-crsf/blob/master/LICENSE) file for details.

@@ -15,12 +15,12 @@ doc:
 # Run cargo build
 [group('build')]
 build:
-  cargo build --verbose
+  cargo build
 
 # Run cargo clean
 [group('build')]
 clean:
-  cargo clean --verbose
+  cargo clean
 
 # Install cargo tools used in package maintenance
 [group('build')]
@@ -72,9 +72,10 @@ cov:
 [group('test')]
 ci:
   cargo clippy --all -- -D warnings
-  cargo build --verbose
-  cargo test --all-features --verbose
+  cargo build
+  cargo test --all-features
   cargo test --examples
+  cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 # Executes evaluation logic agains BROAD dataset
 [group('test')]
