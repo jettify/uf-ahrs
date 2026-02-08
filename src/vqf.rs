@@ -508,7 +508,12 @@ impl Vqf {
 
         let cosine = cosf(half_angle);
         let sine = sinf(half_angle) / gyro_norm;
-        let gyro_step = Quaternion::new(cosine, sine * gyro.x, sine * gyro.y, sine * gyro.z);
+        let gyro_step = Quaternion::new(
+            cosine,
+            sine * unbiased_gyro.x,
+            sine * unbiased_gyro.y,
+            sine * unbiased_gyro.z,
+        );
 
         self.state.gyroscope =
             UnitQuaternion::from_quaternion(self.state.gyroscope.quaternion() * gyro_step);
@@ -876,5 +881,32 @@ mod tests {
         assert_relative_eq!(roll, rad_45, epsilon = 0.01);
         assert_relative_eq!(pitch, 0.0, epsilon = 0.01);
         assert_relative_eq!(yaw, 0.0, epsilon = 0.01);
+    }
+
+    #[test]
+    fn test_gyro_update_applies_bias() {
+        let params = VqfParameters::default();
+        let sample_period = Duration::from_millis(100);
+        let mut ahrs =
+            Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
+
+        ahrs.state.bias = Vector3::new(0.1, -0.2, 0.3);
+        let gyro = Vector3::new(0.4, 0.5, -0.6);
+        let unbiased = gyro - ahrs.state.bias;
+
+        ahrs.gyroscope_update(gyro);
+
+        let gyro_norm = unbiased.norm();
+        let half_angle = (sample_period.as_secs_f32() * gyro_norm) / 2.0;
+        let cosine = cosf(half_angle);
+        let sine = sinf(half_angle) / gyro_norm;
+        let expected = UnitQuaternion::from_quaternion(Quaternion::new(
+            cosine,
+            sine * unbiased.x,
+            sine * unbiased.y,
+            sine * unbiased.z,
+        ));
+
+        assert_relative_eq!(ahrs.state.gyroscope, expected, epsilon = 1e-6);
     }
 }
