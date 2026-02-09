@@ -27,6 +27,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8efb64bd706a16a1bdde310ae86b351e4d21550d98d056f22f8a7f7a2183fec"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9abbd1bc6865053c427f7198e6af43bfdedc55ab791faed4fbd361d789575ff"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -66,6 +86,22 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "dsp-fixedpoint"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c71e6691b4edb40c0a1bd948fa524482e3f36f690d782fcabdc39b5d52f6dcf8"
+dependencies = [
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "dsp-process"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f999350286aca82b7fb79f05318f2abe0967b1f068d7a24c573c02369d1153f5"
 
 [[package]]
 name = "equivalent"
@@ -148,10 +184,13 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idsp"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16d1e6135ee1f9e22ef8c3ade3f851c8af40f4bb472c5c7739fd7254035fff2e"
+checksum = "f514ce6181d9bf2385f0a0ba7df1d63ea4c561ac7b86067345a9e73fba5c15f7"
 dependencies = [
+ "bytemuck",
+ "dsp-fixedpoint",
+ "dsp-process",
  "miniconf",
  "num-complex",
  "num-traits",

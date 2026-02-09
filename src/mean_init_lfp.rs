@@ -43,7 +43,7 @@ impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
             return self.filter_arithmetic_mean(x);
         }
 
-        let &[b0, b1, b2, a1, a2] = self.biquad.ba();
+        let [b0, b1, b2, a1, a2] = self.biquad.ba;
         let y = self.state[0] + x * b0;
         self.state[0] = self.state[1] + x * b1 - y * a1;
         self.state[1] = x * b2 - y * a2;
@@ -62,12 +62,8 @@ impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
             let x0 = self.state[1] / self.sample_count as f32;
 
             // Set initial state based on the mean value
-            let b = [
-                self.biquad.ba()[0],
-                self.biquad.ba()[1],
-                self.biquad.ba()[2],
-            ];
-            let a = [self.biquad.ba()[3], self.biquad.ba()[4]];
+            let b = [self.biquad.ba[0], self.biquad.ba[1], self.biquad.ba[2]];
+            let a = [self.biquad.ba[3], self.biquad.ba[4]];
             self.state = Self::filter_initial_state(x0, b, a);
 
             self.initialized = true;
