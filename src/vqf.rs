@@ -359,7 +359,7 @@ impl Vqf {
     }
 
     pub fn magnetometer_update(&mut self, mag: Vector3<f32>) {
-        if mag == Vector3::zeros() {
+        if mag.norm() <= f32::EPSILON {
             return;
         }
 
@@ -535,7 +535,7 @@ impl Vqf {
     }
 
     pub fn accelerometer_update(&mut self, accel: Vector3<f32>) {
-        if accel == Vector3::zeros() {
+        if accel.norm() <= f32::EPSILON {
             return;
         }
 
@@ -659,17 +659,26 @@ impl Vqf {
             let r_transpose = r.transpose();
             let r_p = r * self.state.bias_p;
 
+            let regularization = 1e-9;
             let w_r_p_r_t = w_diag + (r_p * r_transpose);
-            let w_r_p_r_t_inv = w_r_p_r_t
+            let w_r_p_r_t_inv = (w_r_p_r_t + Matrix3::identity() * regularization)
                 .try_inverse()
-                .expect("(W + R P R^T) isn't a square matrix");
+                .or_else(|| {
+                    (w_r_p_r_t + Matrix3::identity() * regularization * 100.0).try_inverse()
+                });
+            let Some(w_r_p_r_t_inv) = w_r_p_r_t_inv else {
+                return;
+            };
             let k = self.state.bias_p * r_transpose * w_r_p_r_t_inv;
 
             // step 3: b = b + k e (line 37)
             bias += k * e;
 
-            // step 4: P = P - K R P (line 38)
-            self.state.bias_p -= k * r_p;
+            // step 4: Joseph form for numerical stability.
+            let i = Matrix3::identity();
+            let k_r = k * r;
+            let p = self.state.bias_p;
+            self.state.bias_p = (i - k_r) * p * (i - k_r).transpose() + k * w_diag * k.transpose();
 
             // ensure that the new bias estimate is within the allowed range
             self.state.bias = bias.simd_clamp(-bias_clip_vector, bias_clip_vector);
@@ -777,6 +786,8 @@ mod tests {
     extern crate std;
     use super::*;
     use approx::assert_relative_eq;
+    use core::time::Duration;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
 
     #[test]
     fn test_gyro_update_applies_bias() {
@@ -803,6 +814,38 @@ mod tests {
         ));
 
         assert_relative_eq!(ahrs.state.gyroscope, expected, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_bias_estimation_singular_innovation_does_not_panic_and_bias_p_finite() {
+        let mut params = VqfParameters::default();
+        params.do_bias_estimation = true;
+        params.do_rest_bias_estimation = true;
+        params.bias_sigma_initial = 0.0;
+        params.bias_sigma_motion = 0.0;
+        params.bias_sigma_rest = 0.0;
+        params.bias_forgetting_time = Duration::from_secs(u64::MAX);
+
+        let sample_period = Duration::from_millis(10);
+        let mut ahrs = Vqf::new(sample_period, params);
+
+        let gyro = Vector3::new(0.01, 0.02, -0.03);
+        let accel = Vector3::new(0.0, 0.0, 9.81);
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            for _ in 0..10 {
+                ahrs.update_imu(gyro, accel);
+            }
+        }));
+
+        assert!(result.is_ok());
+
+        for i in 0..3 {
+            for j in 0..3 {
+                let v = ahrs.state.bias_p[(i, j)];
+                assert!(v.is_finite());
+            }
+        }
     }
 }
 // Rest of tests live in `tests/ahrs_test.rs` to share coverage across algorithms.
