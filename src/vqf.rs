@@ -589,8 +589,8 @@ impl Vqf {
         // R b_hat from line 25, only x and y components are used
         // as the z component is the bias of the magnetometer
         let rb_hat = Vector2::new(
-            r[(0, 0)] * bias[0] + r[(0, 1)] * bias[1] + r[(0, 2)] * bias[2],
-            r[(1, 0)] * bias[0] + r[(1, 1)] * bias[1] + r[(1, 2)] * bias[2],
+            r[(0, 0)] * bias.x + r[(0, 1)] * bias.y + r[(0, 2)] * bias.z,
+            r[(1, 0)] * bias.x + r[(1, 1)] * bias.y + r[(1, 2)] * bias.z,
         );
 
         // line 24 from Algorithm 2
@@ -614,13 +614,13 @@ impl Vqf {
             (
                 Vector3::new(
                     -acc_earth.y / acc_rate + bias_lp.x
-                        - r[(0, 0)] * bias[0]
-                        - r[(0, 1)] * bias[1]
-                        - r[(0, 2)] * bias[2],
+                        - r[(0, 0)] * bias.x
+                        - r[(0, 1)] * bias.y
+                        - r[(0, 2)] * bias.z,
                     acc_earth.x / acc_rate + bias_lp.y
-                        - r[(1, 0)] * bias[0]
-                        - r[(1, 1)] * bias[1]
-                        - r[(1, 2)] * bias[2],
+                        - r[(1, 0)] * bias.x
+                        - r[(1, 1)] * bias.y
+                        - r[(1, 2)] * bias.z,
                     0.0,
                 ),
                 r,
