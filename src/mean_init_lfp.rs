@@ -52,7 +52,10 @@ impl<const N: usize, const M: usize> MeanInitializedLowPassFilter<N, M> {
     }
 
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "sample_count is reasoalbly small number to check if filter initialized, depends on sample period but should be <= 10k"
+    )]
     fn filter_arithmetic_mean(&mut self, x: SMatrix<f32, N, M>) -> SMatrix<f32, N, M> {
         self.sample_count += 1;
         self.state[1] += x;
