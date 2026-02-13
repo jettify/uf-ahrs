@@ -13,7 +13,7 @@ repository = "https://github.com/jettify/uf-ahrs"
 readme = "README.md"
 
 [dependencies]
-idsp = "0.20.0"
+idsp = "0.21.0"
 libm = "0.2.15"
 nalgebra = { version = "0.34.1", default-features = false, features = ["libm"] }
 
