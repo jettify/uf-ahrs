@@ -588,9 +588,10 @@ impl Vqf {
 
         // R b_hat from line 25, only x and y components are used
         // as the z component is the bias of the magnetometer
+        let r_mat = r.matrix();
         let rb_hat = Vector2::new(
-            r[(0, 0)] * bias.x + r[(0, 1)] * bias.y + r[(0, 2)] * bias.z,
-            r[(1, 0)] * bias.x + r[(1, 1)] * bias.y + r[(1, 2)] * bias.z,
+            r_mat.m11 * bias.x + r_mat.m12 * bias.y + r_mat.m13 * bias.z,
+            r_mat.m21 * bias.x + r_mat.m22 * bias.y + r_mat.m23 * bias.z,
         );
 
         // line 24 from Algorithm 2
@@ -614,13 +615,13 @@ impl Vqf {
             (
                 Vector3::new(
                     -acc_earth.y / acc_rate + bias_lp.x
-                        - r[(0, 0)] * bias.x
-                        - r[(0, 1)] * bias.y
-                        - r[(0, 2)] * bias.z,
+                        - r.m11 * bias.x
+                        - r.m12 * bias.y
+                        - r.m13 * bias.z,
                     acc_earth.x / acc_rate + bias_lp.y
-                        - r[(1, 0)] * bias.x
-                        - r[(1, 1)] * bias.y
-                        - r[(1, 2)] * bias.z,
+                        - r.m21 * bias.x
+                        - r.m22 * bias.y
+                        - r.m23 * bias.z,
                     0.0,
                 ),
                 r,
@@ -637,16 +638,16 @@ impl Vqf {
         // Kalman filter update
         // step 1: P = P + V (also increase covariance if there is no measurement
         // update!)
-        if self.state.bias_p[(0, 0)] < self.coefficients.bias.p0 {
-            self.state.bias_p[(0, 0)] += self.coefficients.bias.v;
+        if self.state.bias_p.m11 < self.coefficients.bias.p0 {
+            self.state.bias_p.m11 += self.coefficients.bias.v;
         }
 
-        if self.state.bias_p[(1, 1)] < self.coefficients.bias.p0 {
-            self.state.bias_p[(1, 1)] += self.coefficients.bias.v;
+        if self.state.bias_p.m22 < self.coefficients.bias.p0 {
+            self.state.bias_p.m22 += self.coefficients.bias.v;
         }
 
-        if self.state.bias_p[(2, 2)] < self.coefficients.bias.p0 {
-            self.state.bias_p[(2, 2)] += self.coefficients.bias.v;
+        if self.state.bias_p.m33 < self.coefficients.bias.p0 {
+            self.state.bias_p.m33 += self.coefficients.bias.v;
         }
 
         if let Some(w) = w {
