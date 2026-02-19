@@ -79,47 +79,53 @@ impl Ahrs for Madgwick {
         };
 
         let h = q * (Quaternion::from_parts(0.0, mag) * q.conjugate());
-        let b = Quaternion::new(0.0, Vector2::new(h[0], h[1]).norm(), 0.0, h[2]);
+        let b = Quaternion::new(
+            0.0,
+            Vector2::new(h.coords.x, h.coords.y).norm(),
+            0.0,
+            h.coords.z,
+        );
 
         let f = Vector6::new(
-            2.0 * (q[0] * q[2] - q[3] * q[1]) - accel.x,
-            2.0 * (q[3] * q[0] + q[1] * q[2]) - accel.y,
-            2.0 * (half - q[0] * q[0] - q[1] * q[1]) - accel.z,
-            2.0 * b[0] * (half - q[1] * q[1] - q[2] * q[2])
-                + 2.0 * b[2] * (q[0] * q[2] - q[3] * q[1])
+            2.0 * (q.coords.x * q.coords.z - q.coords.w * q.coords.y) - accel.x,
+            2.0 * (q.coords.w * q.coords.x + q.coords.y * q.coords.z) - accel.y,
+            2.0 * (half - q.coords.x * q.coords.x - q.coords.y * q.coords.y) - accel.z,
+            2.0 * b.coords.x * (half - q.coords.y * q.coords.y - q.coords.z * q.coords.z)
+                + 2.0 * b.coords.z * (q.coords.x * q.coords.z - q.coords.w * q.coords.y)
                 - mag.x,
-            2.0 * b[0] * (q[0] * q[1] - q[3] * q[2]) + 2.0 * b[2] * (q[3] * q[0] + q[1] * q[2])
+            2.0 * b.coords.x * (q.coords.x * q.coords.y - q.coords.w * q.coords.z)
+                + 2.0 * b.coords.z * (q.coords.w * q.coords.x + q.coords.y * q.coords.z)
                 - mag.y,
-            2.0 * b[0] * (q[3] * q[1] + q[0] * q[2])
-                + 2.0 * b[2] * (half - q[0] * q[0] - q[1] * q[1])
+            2.0 * b.coords.x * (q.coords.w * q.coords.y + q.coords.x * q.coords.z)
+                + 2.0 * b.coords.z * (half - q.coords.x * q.coords.x - q.coords.y * q.coords.y)
                 - mag.z,
         );
 
         let j_t = Matrix6::new(
-            -2.0 * q[1],
-            2.0 * q[0],
+            -2.0 * q.coords.y,
+            2.0 * q.coords.x,
             0.0,
-            -2.0 * b[2] * q[1],
-            -2.0 * b[0] * q[2] + 2.0 * b[2] * q[0],
-            2.0 * b[0] * q[1],
-            2.0 * q[2],
-            2.0 * q[3],
-            -4.0 * q[0],
-            2.0 * b[2] * q[2],
-            2.0 * b[0] * q[1] + 2.0 * b[2] * q[3],
-            2.0 * b[0] * q[2] - 4.0 * b[2] * q[0],
-            -2.0 * q[3],
-            2.0 * q[2],
-            -4.0 * q[1],
-            -4.0 * b[0] * q[1] - 2.0 * b[2] * q[3],
-            2.0 * b[0] * q[0] + 2.0 * b[2] * q[2],
-            2.0 * b[0] * q[3] - 4.0 * b[2] * q[1],
-            2.0 * q[0],
-            2.0 * q[1],
+            -2.0 * b.coords.z * q.coords.y,
+            -2.0 * b.coords.x * q.coords.z + 2.0 * b.coords.z * q.coords.x,
+            2.0 * b.coords.x * q.coords.y,
+            2.0 * q.coords.z,
+            2.0 * q.coords.w,
+            -4.0 * q.coords.x,
+            2.0 * b.coords.z * q.coords.z,
+            2.0 * b.coords.x * q.coords.y + 2.0 * b.coords.z * q.coords.w,
+            2.0 * b.coords.x * q.coords.z - 4.0 * b.coords.z * q.coords.x,
+            -2.0 * q.coords.w,
+            2.0 * q.coords.z,
+            -4.0 * q.coords.y,
+            -4.0 * b.coords.x * q.coords.y - 2.0 * b.coords.z * q.coords.w,
+            2.0 * b.coords.x * q.coords.x + 2.0 * b.coords.z * q.coords.z,
+            2.0 * b.coords.x * q.coords.w - 4.0 * b.coords.z * q.coords.y,
+            2.0 * q.coords.x,
+            2.0 * q.coords.y,
             0.0,
-            -4.0 * b[0] * q[2] + 2.0 * b[2] * q[0],
-            -2.0 * b[0] * q[3] + 2.0 * b[2] * q[1],
-            2.0 * b[0] * q[0],
+            -4.0 * b.coords.x * q.coords.z + 2.0 * b.coords.z * q.coords.x,
+            -2.0 * b.coords.x * q.coords.w + 2.0 * b.coords.z * q.coords.y,
+            2.0 * b.coords.x * q.coords.x,
             0.0,
             0.0,
             0.0,
@@ -157,27 +163,27 @@ impl Ahrs for Madgwick {
         };
 
         let f = Vector4::new(
-            2.0 * (q[0] * q[2] - q[3] * q[1]) - accel.x,
-            2.0 * (q[3] * q[0] + q[1] * q[2]) - accel.y,
-            2.0 * (half - q[0] * q[0] - q[1] * q[1]) - accel.z,
+            2.0 * (q.coords.x * q.coords.z - q.coords.w * q.coords.y) - accel.x,
+            2.0 * (q.coords.w * q.coords.x + q.coords.y * q.coords.z) - accel.y,
+            2.0 * (half - q.coords.x * q.coords.x - q.coords.y * q.coords.y) - accel.z,
             0.0,
         );
 
         let j_t = Matrix4::new(
-            -2.0 * q[1],
-            2.0 * q[0],
+            -2.0 * q.coords.y,
+            2.0 * q.coords.x,
             0.0,
             0.0,
-            2.0 * q[2],
-            2.0 * q[3],
-            -4.0 * q[0],
+            2.0 * q.coords.z,
+            2.0 * q.coords.w,
+            -4.0 * q.coords.x,
             0.0,
-            -2.0 * q[3],
-            2.0 * q[2],
-            -4.0 * q[1],
+            -2.0 * q.coords.w,
+            2.0 * q.coords.z,
+            -4.0 * q.coords.y,
             0.0,
-            2.0 * q[0],
-            2.0 * q[1],
+            2.0 * q.coords.x,
+            2.0 * q.coords.y,
             0.0,
             0.0,
         );
