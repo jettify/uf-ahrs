@@ -3,6 +3,7 @@ name = "uf-ahrs"
 version = "0.1.0"
 edition = "2024"
 
+rust-version = "1.91.1"
 description = "uf-ahrs  library for attitude and heading estimation using gyroscope, accelerometer and magnetometer."
 keywords = ["ahrs", "imu", "madgwick", "mahony", "vqf"]
 categories = ["embedded", "no-std"]
@@ -11,6 +12,16 @@ license = "Apache-2.0"
 homepage = "https://github.com/jettify/uf-ahrs"
 repository = "https://github.com/jettify/uf-ahrs"
 readme = "README.md"
+include = [
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/src/**",
+  "/tests/**",
+  "/examples/**/*.rs",
+]
 
 [dependencies]
 idsp = "0.21.0"
@@ -20,3 +31,35 @@ nalgebra = { version = "0.34.1", default-features = false, features = ["libm"] }
 [dev-dependencies]
 approx = "0.5.1"
 rstest = "0.26.1"
+
+[lints.clippy]
+unwrap_used = "forbid"
+expect_used = "forbid"
+panic = "deny"
+todo = "warn"
+exit = "deny"
+try_err = "deny"
+unimplemented = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+must_use_candidate = "allow"
+allow_attributes_without_reason = "deny"
+allow_attributes = "deny"
+dbg_macro = "warn"
+infinite_loop = "warn"
+map_err_ignore = "deny"
+rest_pat_in_fully_bound_structs = "warn"
+return_and_then = "warn"
+undocumented_unsafe_blocks = "deny"
+string_slice = "warn"
+unneeded_field_pattern = "warn"
+missing_assert_message = "warn"
+redundant_type_annotations = "warn"
+indexing_slicing = "deny"
+let_underscore_must_use = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
