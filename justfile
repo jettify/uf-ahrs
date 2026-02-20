@@ -75,7 +75,6 @@ ci:
   cargo build
   cargo test --all-features
   cargo test --examples
-  cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 # Executes evaluation logic agains BROAD dataset
 [group('test')]
