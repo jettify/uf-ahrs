@@ -225,3 +225,60 @@ fn test_set_orientation_round_trip(#[case] mut ahrs: AhrsBox) {
     ahrs.set_orientation(expected);
     assert_relative_eq!(ahrs.orientation(), expected);
 }
+
+#[test]
+fn test_default_constructors_start_identity_orientation() {
+    let mahony = Mahony::default();
+    let madgwick = Madgwick::default();
+    let vqf = Vqf::default();
+
+    assert_relative_eq!(mahony.orientation(), UnitQuaternion::identity());
+    assert_relative_eq!(madgwick.orientation(), UnitQuaternion::identity());
+    assert_relative_eq!(vqf.orientation(), UnitQuaternion::identity());
+}
+
+#[test]
+fn test_update_zero_accelerometer_falls_back_to_gyro_for_mahony_and_madgwick() {
+    let gyro = Vector3::new(0.12, -0.34, 0.56);
+    let accel = Vector3::new(0.0, 0.0, 0.0);
+    let mag = Vector3::new(1.0, 0.0, 0.0);
+
+    let mut mahony_update = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    let mut mahony_gyro = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    mahony_update.update(gyro, accel, mag);
+    mahony_gyro.update_gyro(gyro);
+    assert_relative_eq!(mahony_update.orientation(), mahony_gyro.orientation());
+
+    let mut madgwick_update = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    let mut madgwick_gyro = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    madgwick_update.update(gyro, accel, mag);
+    madgwick_gyro.update_gyro(gyro);
+    assert_relative_eq!(madgwick_update.orientation(), madgwick_gyro.orientation());
+}
+
+#[test]
+fn test_vqf_constructors_with_orientation_apply_given_orientation() {
+    let period = Duration::from_millis(10);
+    let params = VqfParameters::default();
+    let expected = UnitQuaternion::from_euler_angles(0.2, -0.1, 0.3);
+
+    let vqf_with_orientation = Vqf::new_with_orientation(period, params.clone(), expected);
+    assert_relative_eq!(vqf_with_orientation.orientation(), expected, epsilon = 1e-6);
+
+    let vqf_with_sensor_rates = Vqf::new_with_sensor_rates_and_orientation(
+        period,
+        Duration::from_millis(20),
+        Duration::from_millis(30),
+        params,
+        expected,
+    );
+    assert_relative_eq!(vqf_with_sensor_rates.orientation(), expected, epsilon = 1e-6);
+}
+
+#[test]
+fn test_vqf_update2_updates_orientation() {
+    let mut vqf = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+    let initial = vqf.orientation();
+    vqf.update2(Vector3::new(0.3, -0.1, 0.2), Vector3::new(0.1, 0.2, 9.8));
+    assert!(vqf.orientation().angle_to(&initial) > 0.0);
+}
