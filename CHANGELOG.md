@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/jettify/uf-ahrs/compare/v0.1.0...v0.1.1) - 2026-02-20
+
+### Fixed
+
+- Handle zero tau correctly. ([#18](https://github.com/jettify/uf-ahrs/pull/18))
+
+### Other
+
+- Add more test for coverage. ([#25](https://github.com/jettify/uf-ahrs/pull/25))
+- Strict lints. ([#24](https://github.com/jettify/uf-ahrs/pull/24))
+- Do not use indexes in VQF to avoid panics. ([#23](https://github.com/jettify/uf-ahrs/pull/23))
+- Avoid using indexes in Madgwick to minimize risk of panics. ([#22](https://github.com/jettify/uf-ahrs/pull/22))
+- Avoid indexing for better safety in Mahony algo. ([#21](https://github.com/jettify/uf-ahrs/pull/21))
+- Upgrade idsp library. ([#20](https://github.com/jettify/uf-ahrs/pull/20))
+- Avoid using indexes in madgwick ([#19](https://github.com/jettify/uf-ahrs/pull/19))
+- More numericaly stable Kalman implementation.
+- Upgrade idsp library.
+- Share tests across algos to increase coverage. ([#17](https://github.com/jettify/uf-ahrs/pull/17))
+- Correct REAMDE links add docs reference.
+- release v0.1.0 ([#15](https://github.com/jettify/uf-ahrs/pull/15))
+
 ## [0.1.0](https://github.com/jettify/uf-ahrs/releases/tag/v0.1.0) - 2026-02-08
 
 ### Added
