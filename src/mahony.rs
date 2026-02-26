@@ -90,7 +90,8 @@ impl Ahrs for Mahony {
         let v = Vector3::new(
             2.0 * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
             2.0 * (q.coords.w * q.coords.x + q.coords.y * q.coords.z),
-            q.coords.w * q.coords.w - q.coords.x * q.coords.x - q.coords.y * q.coords.y + q.coords.z * q.coords.z,
+            q.coords.w * q.coords.w - q.coords.x * q.coords.x - q.coords.y * q.coords.y
+                + q.coords.z * q.coords.z,
         );
 
         let e = accel.cross(&v);
@@ -118,18 +119,25 @@ impl Ahrs for Mahony {
         };
 
         let h = q * (Quaternion::from_parts(0.0, mag) * q.conjugate());
-        let b = Quaternion::new(0.0, Vector2::new(h.coords.x, h.coords.y).norm(), 0.0, h.coords.z);
+        let b = Quaternion::new(
+            0.0,
+            Vector2::new(h.coords.x, h.coords.y).norm(),
+            0.0,
+            h.coords.z,
+        );
 
         let v = Vector3::new(
             two * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
             two * (q.coords.w * q.coords.x + q.coords.y * q.coords.z),
-            q.coords.w * q.coords.w - q.coords.x * q.coords.x - q.coords.y * q.coords.y + q.coords.z * q.coords.z,
+            q.coords.w * q.coords.w - q.coords.x * q.coords.x - q.coords.y * q.coords.y
+                + q.coords.z * q.coords.z,
         );
 
         let w = Vector3::new(
             2.0 * b.coords.x * (0.5 - q.coords.y * q.coords.y - q.coords.z * q.coords.z)
                 + 2.0 * b.coords.z * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
-            2.0 * b.coords.x * (q.coords.x * q.coords.y - q.coords.w * q.coords.z) + 2.0 * b.coords.z * (q.coords.w * q.coords.x + q.coords.y * q.coords.z),
+            2.0 * b.coords.x * (q.coords.x * q.coords.y - q.coords.w * q.coords.z)
+                + 2.0 * b.coords.z * (q.coords.w * q.coords.x + q.coords.y * q.coords.z),
             2.0 * b.coords.x * (q.coords.w * q.coords.y + q.coords.x * q.coords.z)
                 + 2.0 * b.coords.z * (0.5 - q.coords.x * q.coords.x - q.coords.y * q.coords.y),
         );

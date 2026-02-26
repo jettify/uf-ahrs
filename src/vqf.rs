@@ -848,5 +848,110 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_gain_from_tau_zero_is_one() {
+        let gain = gain_from_tau(Duration::ZERO, Duration::from_millis(10));
+        assert_relative_eq!(gain, 1.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_accelerometer_update_handles_opposite_gravity_vector() {
+        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+        ahrs.accelerometer_update(Vector3::new(0.0, 0.0, -1.0));
+        assert!(
+            ahrs.state
+                .accelerometer
+                .quaternion()
+                .coords
+                .iter()
+                .all(|x| x.is_finite())
+        );
+    }
+
+    #[test]
+    fn test_accel_rest_detection_resets_rest_on_large_deviation() {
+        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+        ahrs.accelerometer_update(Vector3::new(0.0, 0.0, 9.81));
+        ahrs.accelerometer_update(Vector3::new(50.0, 0.0, 0.0));
+        assert!(!ahrs.is_rest_phase());
+    }
+
+    #[test]
+    fn test_bias_estimation_none_measurement_when_disabled() {
+        let mut params = VqfParameters::default();
+        params.do_bias_estimation = false;
+        params.do_rest_bias_estimation = false;
+        let mut ahrs = Vqf::new(Duration::from_millis(10), params);
+        ahrs.accelerometer_update(Vector3::new(0.0, 0.0, 9.81));
+        assert!(ahrs.state.bias.iter().all(|x| x.is_finite()));
+    }
+
+    #[test]
+    fn test_magnetometer_update_wraps_disagreement_and_delta_high() {
+        let mut params = VqfParameters::default();
+        params.do_magnetometer_update = false;
+        params.tau_magnetometer = Duration::ZERO;
+        let mut ahrs = Vqf::new(Duration::from_millis(10), params);
+        ahrs.state.delta = 4.0;
+
+        ahrs.magnetometer_update(Vector3::new(1.0, 0.0, 0.0));
+
+        assert!(ahrs.state.last_magnetometer_disagreement_angle <= core::f32::consts::PI);
+        assert!(ahrs.state.last_magnetometer_disagreement_angle >= -core::f32::consts::PI);
+        assert!(ahrs.state.delta <= core::f32::consts::PI);
+    }
+
+    #[test]
+    fn test_magnetometer_update_wraps_disagreement_and_delta_low() {
+        let mut params = VqfParameters::default();
+        params.do_magnetometer_update = false;
+        params.tau_magnetometer = Duration::ZERO;
+        let mut ahrs = Vqf::new(Duration::from_millis(10), params);
+        ahrs.state.delta = -4.0;
+
+        ahrs.magnetometer_update(Vector3::new(1.0, 0.0, 0.0));
+
+        assert!(ahrs.state.last_magnetometer_disagreement_angle <= core::f32::consts::PI);
+        assert!(ahrs.state.last_magnetometer_disagreement_angle >= -core::f32::consts::PI);
+        assert!(ahrs.state.delta >= -core::f32::consts::PI);
+    }
+
+    #[test]
+    fn test_magnetometer_rejection_duration_decays_when_undisturbed() {
+        let params = VqfParameters::default();
+        let mut ahrs = Vqf::new(Duration::from_millis(10), params);
+        ahrs.state.is_magnetometer_disturbed = false;
+        ahrs.state.magnetometer_reference_norm = 1.0;
+        ahrs.state.magnetometer_reference_dip = 0.0;
+        ahrs.state.magnetometer_rejection_duration = Duration::from_secs_f32(1.0);
+        let before = ahrs.state.magnetometer_rejection_duration;
+
+        ahrs.magnetometer_update(Vector3::new(1.0, 0.0, 0.0));
+
+        assert!(ahrs.state.magnetometer_rejection_duration < before);
+    }
+
+    #[test]
+    fn test_magnetometer_candidate_adoption_when_disturbed() {
+        let mut params = VqfParameters::default();
+        params.magnetometer_current_tau = Duration::ZERO;
+        let mut ahrs = Vqf::new(Duration::from_millis(10), params.clone());
+
+        ahrs.state.is_magnetometer_disturbed = true;
+        ahrs.state.magnetometer_candidate_norm = 1.0;
+        ahrs.state.magnetometer_candidate_dip = 0.0;
+        ahrs.state.magnetometer_candidate_duration = params.magnetometer_new_time;
+        ahrs.state.rest_gyro_low_pass.last_output = Vector3::new(1.0, 0.0, 0.0);
+
+        ahrs.magnetometer_update(Vector3::new(1.0, 0.0, 0.0));
+
+        assert!(!ahrs.state.is_magnetometer_disturbed);
+        assert!(ahrs.state.magnetometer_reference_norm > 0.0);
+        assert!(
+            ahrs.state.magnetometer_undisturbed_duration
+                >= params.magnetometer_min_undisturbed_time
+        );
+    }
 }
 // Rest of tests live in `tests/ahrs_test.rs` to share coverage across algorithms.

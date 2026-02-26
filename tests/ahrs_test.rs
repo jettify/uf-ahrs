@@ -272,7 +272,11 @@ fn test_vqf_constructors_with_orientation_apply_given_orientation() {
         params,
         expected,
     );
-    assert_relative_eq!(vqf_with_sensor_rates.orientation(), expected, epsilon = 1e-6);
+    assert_relative_eq!(
+        vqf_with_sensor_rates.orientation(),
+        expected,
+        epsilon = 1e-6
+    );
 }
 
 #[test]
