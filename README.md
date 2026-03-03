@@ -7,6 +7,14 @@
 
 `uf-ahrs` rust `no_std` library for orientation estimation using gyroscope, accelerometer and magnetometer.
 
+## Demo
+
+<video src="https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4" controls muted playsinline width="900">
+  <a href="https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4">Watch demo video</a>
+</video>
+
+[Direct video link](https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4)
+
 ## Features
 
 * `no_std` and allocator-free for embedded systems.
