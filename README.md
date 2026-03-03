@@ -69,6 +69,17 @@ fn main() {
 }
 ```
 
+## Benchmark Scores (BROAD)
+
+The results below are from evaluations on the **Berlin Robust Orientation Estimation Assessment Dataset (BROAD)**.
+For context, BROAD contains **39 trials** with synchronized IMU and optical ground-truth orientation:
+**23 undisturbed trials** (rotation, translation, and combined motion at slow/fast speeds) and
+**16 disturbed trials** (e.g., tapping, vibration, stationary/attached magnets, office environment, and mixed conditions).
+Dataset publication: [https://www.mdpi.com/2306-5729/6/7/72](https://www.mdpi.com/2306-5729/6/7/72).
+
+Reported metrics are dataset-averaged orientation errors in degrees:
+`AVG Total RMSE`, `AVG Heading RMSE`, and `AVG Inclination RMSE`.
+
 ```bash no_run
 Algorithm: Vqf
   AVG Total RMSE:       2.0776 deg
