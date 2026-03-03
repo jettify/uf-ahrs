@@ -9,9 +9,7 @@
 
 ## Demo
 
-<video src="https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4" controls muted playsinline width="900">
-  <a href="https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4">Watch demo video</a>
-</video>
+https://github.com/user-attachments/assets/d1891b70-1a44-4a4e-acee-5aacc891a5e4
 
 [Direct video link](https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4)
 
