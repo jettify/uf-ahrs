@@ -9,7 +9,7 @@
 
 ## Demo
 
-https://github.com/user-attachments/assets/d1891b70-1a44-4a4e-acee-5aacc891a5e4
+<video src="https://github.com/user-attachments/assets/d1891b70-1a44-4a4e-acee-5aacc891a5e4"></video>
 
 [Direct video link](https://raw.githubusercontent.com/jettify/uf-ahrs/master/docs/clip.mp4)
 
@@ -69,6 +69,8 @@ fn main() {
     let q_madgwick = madgwick.orientation();
     let q_vqf = vqf.orientation();
 
+    // std::println used  only for example purposes, library itself
+    // is fully no_std compatible.
     println!("Mahony:   {:?}", q_mahony.euler_angles());
     println!("Madgwick: {:?}", q_madgwick.euler_angles());
     println!("VQF:      {:?}", q_vqf.euler_angles());
