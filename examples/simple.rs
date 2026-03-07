@@ -1,13 +1,13 @@
 use core::time::Duration;
 use nalgebra::Vector3;
-use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParameters};
+use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
 
 fn main() {
     let dt = Duration::from_secs_f32(1.0 / 100.0);
 
     let mut mahony = Mahony::new(dt, MahonyParams::default());
     let mut madgwick = Madgwick::new(dt, MadgwickParams::default());
-    let mut vqf = Vqf::new(dt, VqfParameters::default());
+    let mut vqf = Vqf::new(dt, VqfParams::default());
 
     // Sensor data
     let gyr = Vector3::new(0.0, 0.0, 0.0);

@@ -7,7 +7,7 @@ use core::time::Duration;
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use nalgebra::{UnitQuaternion, Vector3};
 use rstest::{fixture, rstest};
-use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParameters};
+use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
 
 type AhrsBox = Box<dyn Ahrs>;
 
@@ -42,12 +42,12 @@ fn madgwick_imu() -> AhrsBox {
 
 #[fixture]
 fn vqf_gyro() -> AhrsBox {
-    Box::new(Vqf::new(GYRO_PERIOD, VqfParameters::default()))
+    Box::new(Vqf::new(GYRO_PERIOD, VqfParams::default()))
 }
 
 #[fixture]
 fn vqf_imu() -> AhrsBox {
-    Box::new(Vqf::new(IMU_PERIOD, VqfParameters::default()))
+    Box::new(Vqf::new(IMU_PERIOD, VqfParams::default()))
 }
 
 fn assert_euler_close(
@@ -259,7 +259,7 @@ fn test_update_zero_accelerometer_falls_back_to_gyro_for_mahony_and_madgwick() {
 #[test]
 fn test_vqf_constructors_with_orientation_apply_given_orientation() {
     let period = Duration::from_millis(10);
-    let params = VqfParameters::default();
+    let params = VqfParams::default();
     let expected = UnitQuaternion::from_euler_angles(0.2, -0.1, 0.3);
 
     let vqf_with_orientation = Vqf::new_with_orientation(period, params.clone(), expected);
@@ -281,7 +281,7 @@ fn test_vqf_constructors_with_orientation_apply_given_orientation() {
 
 #[test]
 fn test_vqf_update2_updates_orientation() {
-    let mut vqf = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+    let mut vqf = Vqf::new(Duration::from_millis(10), VqfParams::default());
     let initial = vqf.orientation();
     vqf.update2(Vector3::new(0.3, -0.1, 0.2), Vector3::new(0.1, 0.2, 9.8));
     assert!(vqf.orientation().angle_to(&initial) > 0.0);

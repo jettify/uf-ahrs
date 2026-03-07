@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use uf_ahrs::Ahrs;
 use uf_ahrs::{Madgwick, MadgwickParams};
 use uf_ahrs::{Mahony, MahonyParams};
-use uf_ahrs::{Vqf, VqfParameters};
+use uf_ahrs::{Vqf, VqfParams};
 
 use itertools::izip;
 use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector3};
@@ -267,7 +267,7 @@ fn make_ahrs(algorithm: Algorithm, sample_period: Duration) -> Box<dyn Ahrs> {
         Algorithm::Mahony => Box::new(Mahony::new(sample_period, MahonyParams::default())),
         Algorithm::Madgwick => Box::new(Madgwick::new(sample_period, MadgwickParams::default())),
         Algorithm::Vqf => {
-            let params = VqfParameters::default();
+            let params = VqfParams::default();
             Box::new(Vqf::new(sample_period, params))
         }
     }
