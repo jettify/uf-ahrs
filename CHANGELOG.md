@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/jettify/uf-ahrs/compare/v0.1.1...v0.2.0) - 2026-03-07
+
+### Other
+
+- Clarify readme. ([#32](https://github.com/jettify/uf-ahrs/pull/32))
+- [**breaking**] Rename VqfParameters to VqfParams ([#30](https://github.com/jettify/uf-ahrs/pull/30))
+
 ## [0.1.1](https://github.com/jettify/uf-ahrs/compare/v0.1.0...v0.1.1) - 2026-03-03
 
 ### Fixed
