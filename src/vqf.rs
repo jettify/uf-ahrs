@@ -40,7 +40,7 @@ impl VqfState {
     #[must_use]
     pub fn new(
         coefficients: &VqfCoefficients,
-        params: &VqfParameters,
+        params: &VqfParams,
         gyro_rate: Duration,
         accel_rate: Duration,
         mag_rate: Duration,
@@ -104,7 +104,7 @@ impl VqfState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VqfParameters {
+pub struct VqfParams {
     pub tau_accelerometer: Duration,
     pub tau_magnetometer: Duration,
     pub do_magnetometer_update: bool,
@@ -132,7 +132,7 @@ pub struct VqfParameters {
     pub magnetometer_rejection_factor: f32,
 }
 
-impl Default for VqfParameters {
+impl Default for VqfParams {
     fn default() -> Self {
         Self {
             tau_accelerometer: Duration::from_secs_f32(3.0),
@@ -176,7 +176,7 @@ pub struct VqfBiasCoefficients {
 
 impl VqfBiasCoefficients {
     #[must_use]
-    fn new(accelerometer_rate: Duration, params: &VqfParameters) -> Self {
+    fn new(accelerometer_rate: Duration, params: &VqfParams) -> Self {
         // line 17 of Algorithm 2, the initial variance of the bias
         let p0 = powf(params.bias_sigma_initial * BIAS_SCALE, 2.0);
 
@@ -223,7 +223,7 @@ pub struct VqfCoefficients {
 
 pub struct Vqf {
     pub coefficients: VqfCoefficients,
-    parameters: VqfParameters,
+    parameters: VqfParams,
     pub state: VqfState,
     gyro_rate: Duration,
     accel_rate: Duration,
@@ -246,7 +246,7 @@ impl Vqf {
         gyro_sampling_rate: Duration,
         accel_sampling_rate: Duration,
         mag_sampling_rate: Duration,
-        params: VqfParameters,
+        params: VqfParams,
     ) -> Self {
         let (accel_coefficients_b, accel_coefficients_a) =
             second_order_butterworth(params.tau_accelerometer, accel_sampling_rate);
@@ -297,14 +297,14 @@ impl Vqf {
     }
 
     #[must_use]
-    pub fn new(sample_period: Duration, params: VqfParameters) -> Self {
+    pub fn new(sample_period: Duration, params: VqfParams) -> Self {
         Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params)
     }
 
     #[must_use]
     pub fn new_with_orientation(
         sample_period: Duration,
-        params: VqfParameters,
+        params: VqfParams,
         orientation: UnitQuaternion<f32>,
     ) -> Self {
         Vqf::new_with_sensor_rates_and_orientation(
@@ -321,7 +321,7 @@ impl Vqf {
         gyro_sampling_rate: Duration,
         accel_sampling_rate: Duration,
         mag_sampling_rate: Duration,
-        params: VqfParameters,
+        params: VqfParams,
         orientation: UnitQuaternion<f32>,
     ) -> Self {
         let mut vqf = Vqf::new_with_sensor_rates(
@@ -743,7 +743,7 @@ impl Vqf {
 
 impl Default for Vqf {
     fn default() -> Self {
-        Vqf::new(Duration::from_millis(10), VqfParameters::default())
+        Vqf::new(Duration::from_millis(10), VqfParams::default())
     }
 }
 
@@ -792,7 +792,7 @@ mod tests {
 
     #[test]
     fn test_gyro_update_applies_bias() {
-        let params = VqfParameters::default();
+        let params = VqfParams::default();
         let sample_period = Duration::from_millis(100);
         let mut ahrs =
             Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params);
@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn test_bias_estimation_singular_innovation_does_not_panic_and_bias_p_finite() {
-        let mut params = VqfParameters::default();
+        let mut params = VqfParams::default();
         params.do_bias_estimation = true;
         params.do_rest_bias_estimation = true;
         params.bias_sigma_initial = 0.0;
@@ -857,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_accelerometer_update_handles_opposite_gravity_vector() {
-        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParams::default());
         ahrs.accelerometer_update(Vector3::new(0.0, 0.0, -1.0));
         assert!(
             ahrs.state
@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn test_accel_rest_detection_resets_rest_on_large_deviation() {
-        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParameters::default());
+        let mut ahrs = Vqf::new(Duration::from_millis(10), VqfParams::default());
         ahrs.accelerometer_update(Vector3::new(0.0, 0.0, 9.81));
         ahrs.accelerometer_update(Vector3::new(50.0, 0.0, 0.0));
         assert!(!ahrs.is_rest_phase());
@@ -879,7 +879,7 @@ mod tests {
 
     #[test]
     fn test_bias_estimation_none_measurement_when_disabled() {
-        let mut params = VqfParameters::default();
+        let mut params = VqfParams::default();
         params.do_bias_estimation = false;
         params.do_rest_bias_estimation = false;
         let mut ahrs = Vqf::new(Duration::from_millis(10), params);
@@ -889,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_magnetometer_update_wraps_disagreement_and_delta_high() {
-        let mut params = VqfParameters::default();
+        let mut params = VqfParams::default();
         params.do_magnetometer_update = false;
         params.tau_magnetometer = Duration::ZERO;
         let mut ahrs = Vqf::new(Duration::from_millis(10), params);
@@ -904,7 +904,7 @@ mod tests {
 
     #[test]
     fn test_magnetometer_update_wraps_disagreement_and_delta_low() {
-        let mut params = VqfParameters::default();
+        let mut params = VqfParams::default();
         params.do_magnetometer_update = false;
         params.tau_magnetometer = Duration::ZERO;
         let mut ahrs = Vqf::new(Duration::from_millis(10), params);
@@ -919,7 +919,7 @@ mod tests {
 
     #[test]
     fn test_magnetometer_rejection_duration_decays_when_undisturbed() {
-        let params = VqfParameters::default();
+        let params = VqfParams::default();
         let mut ahrs = Vqf::new(Duration::from_millis(10), params);
         ahrs.state.is_magnetometer_disturbed = false;
         ahrs.state.magnetometer_reference_norm = 1.0;
@@ -934,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_magnetometer_candidate_adoption_when_disturbed() {
-        let mut params = VqfParameters::default();
+        let mut params = VqfParams::default();
         params.magnetometer_current_tau = Duration::ZERO;
         let mut ahrs = Vqf::new(Duration::from_millis(10), params.clone());
 

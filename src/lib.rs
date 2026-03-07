@@ -20,4 +20,4 @@ pub use mahony::Mahony;
 pub use mahony::MahonyParams;
 
 pub use vqf::Vqf;
-pub use vqf::VqfParameters;
+pub use vqf::VqfParams;
