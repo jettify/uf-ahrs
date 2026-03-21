@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/jettify/uf-ahrs/compare/v0.2.0...v0.2.1) - 2026-03-21
+
+### Other
+
+- Address more pednatic lints. ([#34](https://github.com/jettify/uf-ahrs/pull/34))
+
 ## [0.2.0](https://github.com/jettify/uf-ahrs/compare/v0.1.1...v0.2.0) - 2026-03-07
 
 ### Other
