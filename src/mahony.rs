@@ -107,9 +107,6 @@ impl Ahrs for Mahony {
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        let q = self.quaternion.as_ref();
-        let two = 2.0;
-
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
             return self.update_gyro(gyroscope);
         };
@@ -118,6 +115,7 @@ impl Ahrs for Mahony {
             return self.update_imu(gyroscope, accelerometer);
         };
 
+        let q = self.quaternion.as_ref();
         let h = q * (Quaternion::from_parts(0.0, mag) * q.conjugate());
         let b = Quaternion::new(
             0.0,
@@ -126,6 +124,7 @@ impl Ahrs for Mahony {
             h.coords.z,
         );
 
+        let two = 2.0;
         let v = Vector3::new(
             two * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
             two * (q.coords.w * q.coords.x + q.coords.y * q.coords.z),

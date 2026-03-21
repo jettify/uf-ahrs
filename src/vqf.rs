@@ -358,6 +358,77 @@ impl Vqf {
         self.accelerometer_update(accel);
     }
 
+    fn do_magnetometer_update(&mut self, mag: Vector3<f32>) {
+        let mag_earth = self.orientation() * mag;
+        let mut mag_norm_dip = Vector2::new(
+            mag_earth.norm(),
+            -libm::asinf(mag_earth.z / mag_earth.norm()),
+        );
+        if self.parameters.magnetometer_current_tau > Duration::ZERO {
+            mag_norm_dip = self
+                .state
+                .magnetometer_norm_dip_low_pass
+                .filter(mag_norm_dip);
+        }
+
+        let mag_norm_th =
+            self.parameters.magnetometer_norm_threshold * self.state.magnetometer_reference_norm;
+        let mag_dip_th = self.parameters.magnetometer_dip_threshold.to_radians();
+
+        if (mag_norm_dip.x - self.state.magnetometer_reference_norm).abs() < mag_norm_th
+            && (mag_norm_dip.y - self.state.magnetometer_reference_dip).abs() < mag_dip_th
+        {
+            self.state.magnetometer_undisturbed_duration += self.mag_rate;
+            if self.state.magnetometer_undisturbed_duration
+                >= self.parameters.magnetometer_min_undisturbed_time
+            {
+                self.state.is_magnetometer_disturbed = false;
+                self.state.magnetometer_reference_norm +=
+                    self.coefficients.magnetometer_reference_k
+                        * (mag_norm_dip.x - self.state.magnetometer_reference_norm);
+                self.state.magnetometer_reference_dip += self.coefficients.magnetometer_reference_k
+                    * (mag_norm_dip.y - self.state.magnetometer_reference_dip);
+            }
+        } else {
+            self.state.magnetometer_undisturbed_duration = Duration::ZERO;
+            self.state.is_magnetometer_disturbed = true;
+        }
+
+        let mag_candidate_norm_th =
+            self.parameters.magnetometer_norm_threshold * self.state.magnetometer_candidate_norm;
+        if (mag_norm_dip.x - self.state.magnetometer_candidate_norm).abs() < mag_candidate_norm_th
+            && (mag_norm_dip.y - self.state.magnetometer_candidate_dip).abs() < mag_dip_th
+        {
+            if self.state.rest_gyro_low_pass.last_output.norm()
+                >= self.parameters.magnetometer_new_min_gyro.to_radians()
+            {
+                self.state.magnetometer_candidate_duration += self.mag_rate;
+            }
+            self.state.magnetometer_candidate_norm += self.coefficients.magnetometer_reference_k
+                * (mag_norm_dip.x - self.state.magnetometer_candidate_norm);
+            self.state.magnetometer_candidate_dip += self.coefficients.magnetometer_reference_k
+                * (mag_norm_dip.y - self.state.magnetometer_candidate_dip);
+
+            if self.state.is_magnetometer_disturbed
+                && (self.state.magnetometer_candidate_duration
+                    >= self.parameters.magnetometer_new_time
+                    || (self.state.magnetometer_reference_norm == 0.0
+                        && self.state.magnetometer_candidate_duration
+                            >= self.parameters.magnetometer_new_first_time))
+            {
+                self.state.magnetometer_reference_norm = self.state.magnetometer_candidate_norm;
+                self.state.magnetometer_reference_dip = self.state.magnetometer_candidate_dip;
+                self.state.is_magnetometer_disturbed = false;
+                self.state.magnetometer_undisturbed_duration =
+                    self.parameters.magnetometer_min_undisturbed_time;
+            }
+        } else {
+            self.state.magnetometer_candidate_duration = Duration::ZERO;
+            self.state.magnetometer_candidate_norm = mag_norm_dip.x;
+            self.state.magnetometer_candidate_dip = mag_norm_dip.y;
+        }
+    }
+
     pub fn magnetometer_update(&mut self, mag: Vector3<f32>) {
         if mag.norm() <= f32::EPSILON {
             return;
@@ -366,78 +437,8 @@ impl Vqf {
         let mag_earth = self.orientation() * mag;
 
         if self.parameters.do_magnetometer_update {
-            let mut mag_norm_dip = Vector2::new(
-                mag_earth.norm(),
-                -libm::asinf(mag_earth.z / mag_earth.norm()),
-            );
-            if self.parameters.magnetometer_current_tau > Duration::ZERO {
-                mag_norm_dip = self
-                    .state
-                    .magnetometer_norm_dip_low_pass
-                    .filter(mag_norm_dip);
-            }
-
-            let mag_norm_th = self.parameters.magnetometer_norm_threshold
-                * self.state.magnetometer_reference_norm;
-            let mag_dip_th = self.parameters.magnetometer_dip_threshold.to_radians();
-
-            if (mag_norm_dip.x - self.state.magnetometer_reference_norm).abs() < mag_norm_th
-                && (mag_norm_dip.y - self.state.magnetometer_reference_dip).abs() < mag_dip_th
-            {
-                self.state.magnetometer_undisturbed_duration += self.mag_rate;
-                if self.state.magnetometer_undisturbed_duration
-                    >= self.parameters.magnetometer_min_undisturbed_time
-                {
-                    self.state.is_magnetometer_disturbed = false;
-                    self.state.magnetometer_reference_norm +=
-                        self.coefficients.magnetometer_reference_k
-                            * (mag_norm_dip.x - self.state.magnetometer_reference_norm);
-                    self.state.magnetometer_reference_dip +=
-                        self.coefficients.magnetometer_reference_k
-                            * (mag_norm_dip.y - self.state.magnetometer_reference_dip);
-                }
-            } else {
-                self.state.magnetometer_undisturbed_duration = Duration::ZERO;
-                self.state.is_magnetometer_disturbed = true;
-            }
-
-            let mag_candidate_norm_th = self.parameters.magnetometer_norm_threshold
-                * self.state.magnetometer_candidate_norm;
-            if (mag_norm_dip.x - self.state.magnetometer_candidate_norm).abs()
-                < mag_candidate_norm_th
-                && (mag_norm_dip.y - self.state.magnetometer_candidate_dip).abs() < mag_dip_th
-            {
-                if self.state.rest_gyro_low_pass.last_output.norm()
-                    >= self.parameters.magnetometer_new_min_gyro.to_radians()
-                {
-                    self.state.magnetometer_candidate_duration += self.mag_rate;
-                }
-                self.state.magnetometer_candidate_norm +=
-                    self.coefficients.magnetometer_reference_k
-                        * (mag_norm_dip.x - self.state.magnetometer_candidate_norm);
-                self.state.magnetometer_candidate_dip += self.coefficients.magnetometer_reference_k
-                    * (mag_norm_dip.y - self.state.magnetometer_candidate_dip);
-
-                if self.state.is_magnetometer_disturbed
-                    && (self.state.magnetometer_candidate_duration
-                        >= self.parameters.magnetometer_new_time
-                        || (self.state.magnetometer_reference_norm == 0.0
-                            && self.state.magnetometer_candidate_duration
-                                >= self.parameters.magnetometer_new_first_time))
-                {
-                    self.state.magnetometer_reference_norm = self.state.magnetometer_candidate_norm;
-                    self.state.magnetometer_reference_dip = self.state.magnetometer_candidate_dip;
-                    self.state.is_magnetometer_disturbed = false;
-                    self.state.magnetometer_undisturbed_duration =
-                        self.parameters.magnetometer_min_undisturbed_time;
-                }
-            } else {
-                self.state.magnetometer_candidate_duration = Duration::ZERO;
-                self.state.magnetometer_candidate_norm = mag_norm_dip.x;
-                self.state.magnetometer_candidate_dip = mag_norm_dip.y;
-            }
+            self.do_magnetometer_update(mag);
         }
-
         self.state.last_magnetometer_disagreement_angle =
             libm::atan2f(-mag_earth.y, mag_earth.x) - self.state.delta;
         //libm::atan2f(mag_earth.x, mag_earth.y) - self.state.delta;
@@ -546,7 +547,7 @@ impl Vqf {
         let acc_earth = self.state.gyroscope * accel;
         let accel_low_pass = self.state.accelerometer_low_pass.filter(acc_earth);
         let acc_earth = (self.state.accelerometer * accel_low_pass).normalize();
-        let q_w = sqrtf((acc_earth.z + 1.0) / 2.0); // equation 4
+        let q_w = sqrtf(f32::midpoint(acc_earth.z, 1.0)); // equation 4
         // equation 5
         let inclination_correction = if q_w > f32::EPSILON {
             let q_x = acc_earth.y / (2.0 * q_w);
