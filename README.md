@@ -56,8 +56,8 @@ fn main() {
     let mut vqf = Vqf::new(dt, VqfParams::default());
 
     // Sensor data
-    let gyr = Vector3::new(0.0, 0.0, 0.0);
-    let acc = Vector3::new(0.0, 0.0, 9.81);
+    let gyr = Vector3::new(0.0, 0.0, 0.0);     // rad/s
+    let acc = Vector3::new(0.0, 0.0, 9.81);    // m/s²
     let mag = Vector3::new(20.0, 0.0, 0.0);
 
     mahony.update(gyr, acc, mag);
