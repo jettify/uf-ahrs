@@ -43,6 +43,12 @@ cargo add uf-ahrs
 
 Here is a simple example showing how to initialize and use `Mahony`, `Madgwick`, and `VQF` filters.
 
+> **Note on units**
+>
+> - Gyroscope data must be in **rad/s**
+> - Accelerometer and magnetometer units do not matter, as long as they are consistent.
+>   The filters normalize these vectors internally.
+
 ```rust
 use core::time::Duration;
 use nalgebra::Vector3;
@@ -57,7 +63,7 @@ fn main() {
 
     // Sensor data
     let gyr = Vector3::new(0.0, 0.0, 0.0);     // rad/s
-    let acc = Vector3::new(0.0, 0.0, 9.81);    // m/s²
+    let acc = Vector3::new(0.0, 0.0, 9.81);
     let mag = Vector3::new(20.0, 0.0, 0.0);
 
     mahony.update(gyr, acc, mag);
