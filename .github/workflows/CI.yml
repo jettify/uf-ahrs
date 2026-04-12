@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v5
+    - name: Install Rust target
+      run: rustup target add thumbv7em-none-eabihf
     - name: Install Just
       uses: taiki-e/install-action@just
     - name: Install cargo-llvm-cov
