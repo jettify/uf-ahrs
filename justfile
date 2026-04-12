@@ -75,6 +75,11 @@ ci:
   cargo build
   cargo test --all-features
   cargo test --examples
+  just ci-stm32
+
+[group('test')]
+ci-stm32:
+  cargo check --manifest-path examples/tbs-lucid-h7/Cargo.toml --target thumbv7em-none-eabihf
 
 # Executes evaluation logic agains BROAD dataset
 [group('test')]
