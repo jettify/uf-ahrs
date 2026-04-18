@@ -136,6 +136,9 @@ This library incorporates ideas and data from the following projects and publica
 - **ahrs-rs**: alternative Mahony and Madgwick filter implementation in Rust.
   [https://github.com/jmagnuson/ahrs-rs](https://github.com/jmagnuson/ahrs-rs)
 
+- **vqf**: Original VQF implementation in Matlab and C++.
+  [https://github.com/dlaidig/vqf](https://github.com/dlaidig/vqf)
+
 - **vqf-rs**: alternative VQF filter implementation in Rust.
   [https://github.com/vgskye/vqf-rs](https://github.com/vgskye/vqf-rs)
 
