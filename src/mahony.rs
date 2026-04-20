@@ -4,9 +4,12 @@ use core::time::Duration;
 use crate::traits::Ahrs;
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
+/// Tuning parameters for the [`Mahony`] filter.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MahonyParams {
+    /// Proportional gain for orientation error correction.
     pub kp: f32,
+    /// Integral gain for gyroscope bias estimation.
     pub ki: f32,
 }
 
@@ -19,10 +22,12 @@ impl Default for MahonyParams {
     }
 }
 
+/// Mahony nonlinear complementary filter for orientation estimation.
 #[derive(Debug)]
 pub struct Mahony {
     dt: f32,
     params: MahonyParams,
+    /// Estimated gyroscope bias in radians per second.
     pub bias: Vector3<f32>,
     quaternion: UnitQuaternion<f32>,
 }
@@ -37,11 +42,15 @@ impl Default for Mahony {
 }
 
 impl Mahony {
+    /// Creates a filter with identity orientation.
+    ///
+    /// `sample_period` controls gyroscope integration step size.
     pub fn new(sample_period: Duration, params: MahonyParams) -> Self {
         let orientation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         Mahony::new_with_orientation(sample_period, params, orientation)
     }
 
+    /// Creates a filter with a custom initial orientation.
     pub fn new_with_orientation(
         sample_period: Duration,
         params: MahonyParams,
@@ -55,6 +64,9 @@ impl Mahony {
         }
     }
 
+    /// Integrates gyroscope data for one step with an explicit `dt` in seconds.
+    ///
+    /// `gyroscope` must be in radians per second.
     pub fn update_gyro_with_dt(&mut self, gyroscope: Vector3<f32>, dt: f32) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
         let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * 0.5;
