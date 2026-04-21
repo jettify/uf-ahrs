@@ -4,8 +4,12 @@ use core::time::Duration;
 use crate::traits::Ahrs;
 use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4, Vector6};
 
+/// Tuning parameters for the [`Madgwick`] filter.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MadgwickParams {
+    /// Gradient descent gain.
+    ///
+    /// Larger values increase correction aggressiveness and noise sensitivity.
     pub beta: f32,
 }
 
@@ -15,6 +19,7 @@ impl Default for MadgwickParams {
     }
 }
 
+/// Madgwick gradient-descent AHRS filter.
 #[derive(Debug)]
 pub struct Madgwick {
     dt: f32,
@@ -32,6 +37,9 @@ impl Default for Madgwick {
 }
 
 impl Madgwick {
+    /// Creates a filter with identity orientation.
+    ///
+    /// `sample_period` controls gyroscope integration step size.
     pub fn new(sample_period: Duration, params: MadgwickParams) -> Self {
         Madgwick::new_with_orientation(
             sample_period,
@@ -40,6 +48,7 @@ impl Madgwick {
         )
     }
 
+    /// Creates a filter with a custom initial orientation.
     pub fn new_with_orientation(
         sample_period: Duration,
         params: MadgwickParams,
