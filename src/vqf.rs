@@ -9,34 +9,58 @@ use crate::mean_init_lfp::{MeanInitializedLowPassFilter, second_order_butterwort
 
 const BIAS_SCALE: f32 = 100.0;
 
+/// Mutable runtime state of the [`Vqf`] filter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VqfState {
+    /// Gyroscope-integrated orientation component.
     pub gyroscope: UnitQuaternion<f32>,
+    /// Accelerometer inclination correction component.
     pub accelerometer: UnitQuaternion<f32>,
+    /// Heading correction angle (radians).
     pub delta: f32,
     rest: Option<Duration>,
+    /// Whether the current magnetic field is considered disturbed.
     pub is_magnetometer_disturbed: bool,
+    /// Bootstrap gain for initial heading convergence.
     pub magnetometer_k_init: f32,
+    /// Last heading disagreement angle between magnetic north estimate and state (radians).
     pub last_magnetometer_disagreement_angle: f32,
+    /// Last applied heading correction angular rate (radians/second).
     pub last_magnetometer_correction_angular_rate: f32,
+    /// Low-pass filter for earth-frame acceleration.
     pub accelerometer_low_pass: MeanInitializedLowPassFilter<3, 1>,
+    /// Low-pass filter used by gyroscope rest detection.
     pub rest_gyro_low_pass: MeanInitializedLowPassFilter<3, 1>,
+    /// Low-pass filter used by accelerometer rest detection.
     pub rest_accel_low_pass: MeanInitializedLowPassFilter<3, 1>,
+    /// Low-pass filter for rotation matrix terms used in bias estimation.
     pub motion_bias_estimate_rotation_low_pass: MeanInitializedLowPassFilter<3, 3>,
+    /// Low-pass filter for motion-based bias estimate observations.
     pub motion_bias_estimate_low_pass: MeanInitializedLowPassFilter<2, 1>,
+    /// Low-pass filter for magnetic norm and dip estimate.
     pub magnetometer_norm_dip_low_pass: MeanInitializedLowPassFilter<2, 1>,
+    /// Estimated gyroscope bias (radians/second).
     pub bias: SVector<f32, 3>,
+    /// Bias covariance matrix for the Kalman-style estimator.
     pub bias_p: Matrix3<f32>,
+    /// Learned magnetic field norm reference.
     pub magnetometer_reference_norm: f32,
+    /// Learned magnetic dip reference (radians).
     pub magnetometer_reference_dip: f32,
+    /// Continuous time where magnetic measurements were considered undisturbed.
     pub magnetometer_undisturbed_duration: Duration,
+    /// Time spent in magnetometer rejection mode.
     pub magnetometer_rejection_duration: Duration,
+    /// Candidate magnetic field norm for reference replacement.
     pub magnetometer_candidate_norm: f32,
+    /// Candidate magnetic dip (radians) for reference replacement.
     pub magnetometer_candidate_dip: f32,
+    /// Accumulated time for the current magnetometer candidate.
     pub magnetometer_candidate_duration: Duration,
 }
 
 impl VqfState {
+    /// Creates the initial runtime state for the provided parameters and sampling rates.
     #[must_use]
     pub fn new(
         coefficients: &VqfCoefficients,
@@ -103,32 +127,58 @@ impl VqfState {
     }
 }
 
+/// Configuration parameters for [`Vqf`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct VqfParams {
+    /// Time constant for accelerometer inclination correction low-pass filtering.
     pub tau_accelerometer: Duration,
+    /// Time constant for heading correction from magnetometer.
     pub tau_magnetometer: Duration,
+    /// Enables disturbance-aware magnetometer update logic.
     pub do_magnetometer_update: bool,
+    /// Enables motion-based gyroscope bias estimation.
     pub do_bias_estimation: bool,
+    /// Enables rest-phase gyroscope bias estimation.
     pub do_rest_bias_estimation: bool,
+    /// Initial standard deviation of bias estimate (degrees/second).
     pub bias_sigma_initial: f32,
+    /// Time scale controlling bias covariance growth.
     pub bias_forgetting_time: Duration,
+    /// Absolute clip for bias and innovation values (degrees/second).
     pub bias_clip: f32,
+    /// Bias measurement standard deviation during motion (degrees/second).
     pub bias_sigma_motion: f32,
+    /// Additional forgetting factor for vertical bias term.
     pub bias_vertical_forgetting_factor: f32,
+    /// Bias measurement standard deviation during rest (degrees/second).
     pub bias_sigma_rest: f32,
+    /// Minimum continuous rest duration before rest bias updates are trusted.
     pub rest_min_duration: Duration,
+    /// Time constant for rest detection low-pass filters.
     pub rest_filter_tau: Duration,
+    /// Rest detection threshold for gyroscope deviation.
     pub rest_threshold_gyro: f32,
+    /// Rest detection threshold for accelerometer deviation.
     pub rest_threshold_accel: f32,
+    /// Time constant for current magnetic norm/dip filtering.
     pub magnetometer_current_tau: Duration,
+    /// Time constant for magnetic reference adaptation.
     pub magnetometer_reference_tau: Duration,
+    /// Relative norm deviation threshold for magnetometer disturbance checks.
     pub magnetometer_norm_threshold: f32,
+    /// Dip deviation threshold for magnetometer disturbance checks (degrees).
     pub magnetometer_dip_threshold: f32,
+    /// Required candidate duration before replacing reference during disturbances.
     pub magnetometer_new_time: Duration,
+    /// Candidate duration required for the very first reference.
     pub magnetometer_new_first_time: Duration,
+    /// Minimum angular rate to accumulate candidate duration (degrees/second).
     pub magnetometer_new_min_gyro: f32,
+    /// Minimum stable undisturbed time before reference adaptation starts.
     pub magnetometer_min_undisturbed_time: Duration,
+    /// Maximum full magnetometer rejection duration.
     pub magnetometer_max_rejection_time: Duration,
+    /// Reduction factor used when leaving rejection mode.
     pub magnetometer_rejection_factor: f32,
 }
 
@@ -205,7 +255,7 @@ impl VqfBiasCoefficients {
     }
 }
 
-/// Coefficients used for in a [`Vqf`] system.
+/// Precomputed filter coefficients used by [`Vqf`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct VqfCoefficients {
     accel_b: [f32; 3],
@@ -221,9 +271,12 @@ pub struct VqfCoefficients {
     bias: VqfBiasCoefficients,
 }
 
+/// VQF orientation filter with optional bias estimation and magnetometer rejection.
 pub struct Vqf {
+    /// Precomputed coefficients derived from [`VqfParams`] and sample rates.
     pub coefficients: VqfCoefficients,
     parameters: VqfParams,
+    /// Current internal filter state.
     pub state: VqfState,
     gyro_rate: Duration,
     accel_rate: Duration,
@@ -241,6 +294,7 @@ fn gain_from_tau(tau: Duration, t_s: Duration) -> f32 {
 }
 
 impl Vqf {
+    /// Creates a filter with potentially different sample periods for gyro/accel/mag streams.
     #[must_use]
     pub fn new_with_sensor_rates(
         gyro_sampling_rate: Duration,
@@ -296,11 +350,13 @@ impl Vqf {
         }
     }
 
+    /// Creates a filter with a shared sampling period for all sensor streams.
     #[must_use]
     pub fn new(sample_period: Duration, params: VqfParams) -> Self {
         Vqf::new_with_sensor_rates(sample_period, sample_period, sample_period, params)
     }
 
+    /// Creates a filter with custom initial orientation and shared sensor sampling period.
     #[must_use]
     pub fn new_with_orientation(
         sample_period: Duration,
@@ -316,6 +372,7 @@ impl Vqf {
         )
     }
 
+    /// Creates a filter with custom initial orientation and individual sensor sample periods.
     #[must_use]
     pub fn new_with_sensor_rates_and_orientation(
         gyro_sampling_rate: Duration,
@@ -336,23 +393,29 @@ impl Vqf {
 
     #[inline]
     #[must_use]
+    /// Returns `true` when rest has been detected for at least `rest_min_duration`.
     pub fn is_rest_phase(&self) -> bool {
         self.state
             .rest
             .is_some_and(|rest_duration| rest_duration >= self.parameters.rest_min_duration)
     }
 
+    /// Returns roll/pitch orientation estimate without heading correction.
     #[must_use]
     pub fn orientation(&self) -> UnitQuaternion<f32> {
         self.state.accelerometer * self.state.gyroscope
     }
 
+    /// Returns full orientation estimate including heading correction.
     #[must_use]
     pub fn heading_orientation(&self) -> UnitQuaternion<f32> {
         let heading_quat = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), self.state.delta);
         heading_quat * self.orientation()
     }
 
+    /// Runs one gyroscope + accelerometer update step.
+    ///
+    /// `gyro` must be in radians per second.
     pub fn update2(&mut self, gyro: Vector3<f32>, accel: Vector3<f32>) {
         self.gyroscope_update(gyro);
         self.accelerometer_update(accel);
@@ -429,6 +492,11 @@ impl Vqf {
         }
     }
 
+    /// Performs heading correction and disturbance handling with magnetometer data.
+    ///
+    /// `mag` may be in arbitrary units; absolute scale is not important because
+    /// it is normalized internally. Keep units consistent across samples.
+    /// Zero vectors are ignored.
     pub fn magnetometer_update(&mut self, mag: Vector3<f32>) {
         if mag.norm() <= f32::EPSILON {
             return;
@@ -491,6 +559,9 @@ impl Vqf {
         }
     }
 
+    /// Integrates gyroscope measurements and applies bias compensation.
+    ///
+    /// `gyro` must be in radians per second. Zero-norm vectors are ignored.
     pub fn gyroscope_update(&mut self, gyro: Vector3<f32>) {
         if self.parameters.do_rest_bias_estimation {
             self.gyro_rest_detection(gyro);
@@ -535,6 +606,11 @@ impl Vqf {
         }
     }
 
+    /// Updates inclination correction from accelerometer and advances bias estimation.
+    ///
+    /// `accel` may be in arbitrary units; absolute scale is not important because
+    /// it is normalized internally. Keep units consistent across samples.
+    /// Zero vectors are ignored.
     pub fn accelerometer_update(&mut self, accel: Vector3<f32>) {
         if accel.norm() <= f32::EPSILON {
             return;
