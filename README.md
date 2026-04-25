@@ -137,12 +137,6 @@ Static RAM is `data + bss` reported by `cargo size`; it does not include the run
 | VQF IMU | 28_844 B | 26_288 B | 4 B |
 | VQF IMU + magnetometer | 32_356 B | 29_800 B | 4 B |
 
-Reproduce with:
-
-```bash
-cd examples/stm32-blackpill-bench
-just size
-```
 
 ## License
 
