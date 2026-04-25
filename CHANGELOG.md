@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/jettify/uf-ahrs/compare/v0.2.0...v0.2.1) - 2026-04-25
+
+### Other
+
+- Remove reference to uncommited benchmark.
+- Add performance estimates on hardware. ([#39](https://github.com/jettify/uf-ahrs/pull/39))
+- Add vqf doc strings.
+- Add madgwick doc strings
+- Add inline documentation for main trait and Mahomy filter. ([#38](https://github.com/jettify/uf-ahrs/pull/38))
+- Add link to original implementation.
+- Add more elaborate example that uses syntetic data.
+- Clarify sensor data units in README ([#36](https://github.com/jettify/uf-ahrs/pull/36))
+- Address more pednatic lints. ([#34](https://github.com/jettify/uf-ahrs/pull/34))
+
 ## [0.2.0](https://github.com/jettify/uf-ahrs/compare/v0.1.1...v0.2.0) - 2026-03-07
 
 ### Other
