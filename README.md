@@ -109,6 +109,41 @@ Algorithm: Madgwick
   AVG Inclination RMSE: 2.3404 deg
 ```
 
+## Embedded Performance
+
+Measured on an `STM32F411CEUx` Black Pill using the DWT cycle counter. The
+benchmark configures the chip to run at `100 MHz`.
+
+| Filter | Update | Cycles/update | Time/update at 100 MHz |
+| --- | --- | ---: | ---: |
+| Mahony | IMU | 638 | 6.38 us |
+| Mahony | IMU + magnetometer | 1029 | 10.29 us |
+| Madgwick | IMU | 817 | 8.17 us |
+| Madgwick | IMU + magnetometer | 1299 | 12.99 us |
+| VQF | IMU | 4413 | 44.13 us |
+| VQF | IMU + magnetometer | 10282 | 102.82 us |
+
+Following numbers are from `cargo size --release --no-default-features` with `defmt`
+disabled, flash is `text + data`, and the delta is measured relative to `size-base`.
+Static RAM is `data + bss` reported by `cargo size`; it does not include the runtime stack.
+
+| Experiment | Flash total | Flash delta vs base | Static RAM |
+| --- | ---: | ---: | ---: |
+| Base firmware | 2_556 B | - | 4 B |
+| Mahony IMU | 3_884 B | 1_328 B | 4 B |
+| Mahony IMU + magnetometer | 4_616 B | 2_060 B | 4 B |
+| Madgwick IMU | 4_060 B | 1_504 B | 4 B |
+| Madgwick IMU + magnetometer | 5_064 B | 2_508 B | 4 B |
+| VQF IMU | 28_844 B | 26_288 B | 4 B |
+| VQF IMU + magnetometer | 32_356 B | 29_800 B | 4 B |
+
+Reproduce with:
+
+```bash
+cd examples/stm32-blackpill-bench
+just size
+```
+
 ## License
 
 This project is licensed under the `Apache 2.0`. See the [LICENSE](https://github.com/jettify/uf-ahrs/blob/master/LICENSE) file for details.
