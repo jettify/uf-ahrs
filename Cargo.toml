@@ -24,7 +24,7 @@ include = [
 ]
 
 [dependencies]
-idsp = "0.21.0"
+idsp = "0.22.0"
 libm = "0.2.15"
 nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
 

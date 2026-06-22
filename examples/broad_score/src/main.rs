@@ -167,17 +167,20 @@ fn evaluate_dataset(
     let s_comp_y = Series::new("computed_quat_y".into(), quat_y_values);
     let s_comp_z = Series::new("computed_quat_z".into(), quat_z_values);
 
-    let result_df = DataFrame::new(vec![
-        s_comp_w.into(),
-        s_comp_x.into(),
-        s_comp_y.into(),
-        s_comp_z.into(),
-        opt_quat_w.clone(),
-        opt_quat_x.clone(),
-        opt_quat_y.clone(),
-        opt_quat_z.clone(),
-        movement.clone(),
-    ])?;
+    let result_df = DataFrame::new(
+        s_comp_w.len(),
+        vec![
+            s_comp_w.into(),
+            s_comp_x.into(),
+            s_comp_y.into(),
+            s_comp_z.into(),
+            opt_quat_w.clone(),
+            opt_quat_x.clone(),
+            opt_quat_y.clone(),
+            opt_quat_z.clone(),
+            movement.clone(),
+        ],
+    )?;
 
     Ok(result_df)
 }
