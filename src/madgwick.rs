@@ -1,7 +1,7 @@
 use core::f32;
 use core::time::Duration;
 
-use crate::traits::Ahrs;
+use crate::traits::{Ahrs, AhrsWithDt};
 use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4, Vector6};
 
 /// Tuning parameters for the [`Madgwick`] filter.
@@ -62,29 +62,23 @@ impl Madgwick {
     }
 }
 
-impl Ahrs for Madgwick {
-    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
-        self.quaternion = quat;
-    }
-
-    fn orientation(&self) -> UnitQuaternion<f32> {
-        self.quaternion
-    }
-    fn update(
+impl Madgwick {
+    fn update_with_dt_seconds(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
+        dt: f32,
     ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
 
         let half: f32 = 0.5;
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
 
         let Some(mag) = magnetometer.try_normalize(f32::EPSILON) else {
-            return self.update_imu(gyroscope, accelerometer);
+            return self.update_imu_with_dt_seconds(gyroscope, accelerometer, dt);
         };
 
         let h = q * (Quaternion::from_parts(0.0, mag) * q.conjugate());
@@ -150,25 +144,26 @@ impl Ahrs for Madgwick {
         );
 
         let Some(step) = (j_t * f).try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
         let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * half
             - Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
+        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
         self.quaternion
     }
 
-    fn update_imu(
+    fn update_imu_with_dt_seconds(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
+        dt: f32,
     ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
 
         let half: f32 = 0.5;
 
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
 
         let f = Vector4::new(
@@ -197,20 +192,84 @@ impl Ahrs for Madgwick {
             0.0,
         );
         let Some(step) = (j_t * f).try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
         let q_dot = (q * Quaternion::from_parts(0.0, gyroscope)) * half
             - Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
+        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
         self.quaternion
     }
 
-    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
+    fn update_gyro_with_dt_seconds(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        dt: f32,
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
         let half: f32 = 0.5;
         let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * half;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * self.dt);
+        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
         self.quaternion
+    }
+}
+
+impl Ahrs for Madgwick {
+    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
+        self.quaternion = quat;
+    }
+
+    fn orientation(&self) -> UnitQuaternion<f32> {
+        self.quaternion
+    }
+
+    fn update(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_with_dt_seconds(gyroscope, accelerometer, magnetometer, self.dt)
+    }
+
+    fn update_imu(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_imu_with_dt_seconds(gyroscope, accelerometer, self.dt)
+    }
+
+    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
+        self.update_gyro_with_dt_seconds(gyroscope, self.dt)
+    }
+}
+
+impl AhrsWithDt for Madgwick {
+    fn update_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_with_dt_seconds(gyroscope, accelerometer, magnetometer, dt.as_secs_f32())
+    }
+
+    fn update_imu_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_imu_with_dt_seconds(gyroscope, accelerometer, dt.as_secs_f32())
+    }
+
+    fn update_gyro_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_gyro_with_dt_seconds(gyroscope, dt.as_secs_f32())
     }
 }
 
