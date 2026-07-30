@@ -11,7 +11,7 @@ pub(crate) mod mean_init_lfp;
 mod traits;
 mod vqf;
 
-pub use traits::Ahrs;
+pub use traits::{Ahrs, AhrsWithDt};
 
 pub use madgwick::Madgwick;
 pub use madgwick::MadgwickParams;

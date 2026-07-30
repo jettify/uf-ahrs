@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use nalgebra::{UnitQuaternion, Vector3};
 
 /// Common interface for AHRS filters that estimate orientation from IMU/MARG data.
@@ -45,4 +47,31 @@ pub trait Ahrs {
     /// `gyroscope` must be in radians per second.
     /// Returns the updated orientation estimate.
     fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32>;
+}
+
+/// Optional interface for AHRS filters that support a per-update sample period.
+///
+/// Implementations use the supplied duration for all time-dependent operations
+/// in the update, including gyro integration and estimator state updates.
+pub trait AhrsWithDt: Ahrs {
+    /// Updates the filter with gyroscope, accelerometer, and magnetometer data.
+    fn update_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32>;
+
+    /// Updates the filter with gyroscope and accelerometer data only.
+    fn update_imu_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32>;
+
+    /// Updates the filter using only gyroscope integration.
+    fn update_gyro_with_dt(&mut self, dt: Duration, gyroscope: Vector3<f32>)
+    -> UnitQuaternion<f32>;
 }
