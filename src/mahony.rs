@@ -1,7 +1,7 @@
 use core::f32;
 use core::time::Duration;
 
-use crate::traits::Ahrs;
+use crate::traits::{Ahrs, AhrsWithDt};
 use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
 
 /// Tuning parameters for the [`Mahony`] filter.
@@ -64,40 +64,27 @@ impl Mahony {
         }
     }
 
-    /// Integrates gyroscope data for one step with an explicit `dt` in seconds.
-    ///
-    /// `gyroscope` must be in radians per second.
-    pub fn update_gyro_with_dt(&mut self, gyroscope: Vector3<f32>, dt: f32) -> UnitQuaternion<f32> {
+    fn update_gyro_with_dt_seconds(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        dt: f32,
+    ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
         let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * 0.5;
         self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
         self.quaternion
     }
-}
 
-impl Ahrs for Mahony {
-    fn orientation(&self) -> UnitQuaternion<f32> {
-        self.quaternion
-    }
-
-    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
-        self.bias = Vector3::new(0.0, 0.0, 0.0);
-        self.quaternion = quat;
-    }
-
-    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
-        self.update_gyro_with_dt(gyroscope, self.dt)
-    }
-
-    fn update_imu(
+    fn update_imu_with_dt_seconds(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
+        dt: f32,
     ) -> UnitQuaternion<f32> {
         let q = self.quaternion.as_ref();
 
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
         let v = Vector3::new(
             2.0 * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
@@ -108,23 +95,24 @@ impl Ahrs for Mahony {
 
         let e = accel.cross(&v);
         let b_dot = -self.params.ki * e;
-        self.bias += b_dot * self.dt;
+        self.bias += b_dot * dt;
         let corrected = gyroscope + e * self.params.kp - self.bias;
-        self.update_gyro(corrected)
+        self.update_gyro_with_dt_seconds(corrected, dt)
     }
 
-    fn update(
+    fn update_with_dt_seconds(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
+        dt: f32,
     ) -> UnitQuaternion<f32> {
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro(gyroscope);
+            return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
 
         let Some(mag) = magnetometer.try_normalize(f32::EPSILON) else {
-            return self.update_imu(gyroscope, accelerometer);
+            return self.update_imu_with_dt_seconds(gyroscope, accelerometer, dt);
         };
 
         let q = self.quaternion.as_ref();
@@ -155,10 +143,71 @@ impl Ahrs for Mahony {
 
         let e: Vector3<f32> = accel.cross(&v) + mag.cross(&w);
         let b_dot = -self.params.ki * e;
-        self.bias += b_dot * self.dt;
+        self.bias += b_dot * dt;
 
         let corrected = gyroscope + e * self.params.kp - self.bias;
-        self.update_gyro(corrected)
+        self.update_gyro_with_dt_seconds(corrected, dt)
+    }
+}
+
+impl Ahrs for Mahony {
+    fn orientation(&self) -> UnitQuaternion<f32> {
+        self.quaternion
+    }
+
+    fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
+        self.bias = Vector3::new(0.0, 0.0, 0.0);
+        self.quaternion = quat;
+    }
+
+    fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
+        self.update_gyro_with_dt_seconds(gyroscope, self.dt)
+    }
+
+    fn update_imu(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_imu_with_dt_seconds(gyroscope, accelerometer, self.dt)
+    }
+
+    fn update(
+        &mut self,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_with_dt_seconds(gyroscope, accelerometer, magnetometer, self.dt)
+    }
+}
+
+impl AhrsWithDt for Mahony {
+    fn update_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+        magnetometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_with_dt_seconds(gyroscope, accelerometer, magnetometer, dt.as_secs_f32())
+    }
+
+    fn update_imu_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+        accelerometer: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_imu_with_dt_seconds(gyroscope, accelerometer, dt.as_secs_f32())
+    }
+
+    fn update_gyro_with_dt(
+        &mut self,
+        dt: Duration,
+        gyroscope: Vector3<f32>,
+    ) -> UnitQuaternion<f32> {
+        self.update_gyro_with_dt_seconds(gyroscope, dt.as_secs_f32())
     }
 }
 

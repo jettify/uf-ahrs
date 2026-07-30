@@ -7,7 +7,7 @@ use core::time::Duration;
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use nalgebra::{UnitQuaternion, Vector3};
 use rstest::{fixture, rstest};
-use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
+use uf_ahrs::{Ahrs, AhrsWithDt, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
 
 type AhrsBox = Box<dyn Ahrs>;
 
@@ -235,6 +235,52 @@ fn test_default_constructors_start_identity_orientation() {
     assert_relative_eq!(mahony.orientation(), UnitQuaternion::identity());
     assert_relative_eq!(madgwick.orientation(), UnitQuaternion::identity());
     assert_relative_eq!(vqf.orientation(), UnitQuaternion::identity());
+}
+
+#[test]
+fn test_variable_dt_gyro_matches_fixed_period_for_mahony_and_madgwick() {
+    let gyro = Vector3::new(0.12, -0.34, 0.56);
+
+    let mut mahony_fixed = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    let mut mahony_variable = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    mahony_fixed.update_gyro(gyro);
+    mahony_variable.update_gyro_with_dt(IMU_PERIOD, gyro);
+    assert_relative_eq!(mahony_fixed.orientation(), mahony_variable.orientation());
+
+    let mut madgwick_fixed = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    let mut madgwick_variable = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    madgwick_fixed.update_gyro(gyro);
+    madgwick_variable.update_gyro_with_dt(IMU_PERIOD, gyro);
+    assert_relative_eq!(
+        madgwick_fixed.orientation(),
+        madgwick_variable.orientation()
+    );
+}
+
+#[test]
+fn test_variable_dt_changes_gyro_integration() {
+    let gyro = Vector3::new(0.0, 0.0, 1.0);
+
+    let mut mahony = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    let mut madgwick = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    mahony.update_gyro_with_dt(Duration::from_millis(20), gyro);
+    madgwick.update_gyro_with_dt(Duration::from_millis(20), gyro);
+
+    assert_relative_eq!(mahony.orientation().angle(), 0.02, epsilon = 1e-5);
+    assert_relative_eq!(madgwick.orientation().angle(), 0.02, epsilon = 1e-5);
+}
+
+#[test]
+fn test_mahony_bias_integration_uses_variable_dt() {
+    let gyro = Vector3::zeros();
+    let accel = Vector3::new(1.0, 0.0, 0.0);
+
+    let mut short = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    let mut long = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    short.update_imu_with_dt(IMU_PERIOD, gyro, accel);
+    long.update_imu_with_dt(Duration::from_millis(20), gyro, accel);
+
+    assert_relative_eq!(long.bias, short.bias * 2.0, epsilon = 1e-6);
 }
 
 #[test]
