@@ -71,15 +71,15 @@ cov:
 # Run same testing commands as on CI server
 [group('test')]
 ci:
-  cargo clippy --all -- -D warnings
-  cargo build
-  cargo test --all-features
-  cargo test --examples
+  cargo clippy --release --all -- -D warnings
+  cargo build --release
+  cargo test --release --all-features
+  cargo test --release --examples
   just ci-stm32
 
 [group('test')]
 ci-stm32:
-  cargo check --manifest-path examples/tbs-lucid-h7/Cargo.toml --target thumbv7em-none-eabihf
+  cargo check --release --manifest-path examples/tbs-lucid-h7/Cargo.toml --target thumbv7em-none-eabihf
 
 # Executes evaluation logic agains BROAD dataset
 [group('test')]
