@@ -208,7 +208,7 @@ impl Default for VqfParams {
             magnetometer_new_first_time: Duration::from_secs(5),
             magnetometer_new_min_gyro: 20.0,
             magnetometer_min_undisturbed_time: Duration::from_secs_f32(0.5),
-            magnetometer_max_rejection_time: Duration::from_secs(60),
+            magnetometer_max_rejection_time: Duration::from_mins(1),
             magnetometer_rejection_factor: 2.0,
         }
     }

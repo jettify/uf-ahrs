@@ -45,12 +45,14 @@ impl Mahony {
     /// Creates a filter with identity orientation.
     ///
     /// `sample_period` controls gyroscope integration step size.
+    #[must_use]
     pub fn new(sample_period: Duration, params: MahonyParams) -> Self {
         let orientation = UnitQuaternion::from_euler_angles(0.0, 0.0, 0.0);
         Mahony::new_with_orientation(sample_period, params, orientation)
     }
 
     /// Creates a filter with a custom initial orientation.
+    #[must_use]
     pub fn new_with_orientation(
         sample_period: Duration,
         params: MahonyParams,
