@@ -40,6 +40,7 @@ impl Madgwick {
     /// Creates a filter with identity orientation.
     ///
     /// `sample_period` controls gyroscope integration step size.
+    #[must_use]
     pub fn new(sample_period: Duration, params: MadgwickParams) -> Self {
         Madgwick::new_with_orientation(
             sample_period,
@@ -49,6 +50,7 @@ impl Madgwick {
     }
 
     /// Creates a filter with a custom initial orientation.
+    #[must_use]
     pub fn new_with_orientation(
         sample_period: Duration,
         params: MadgwickParams,
