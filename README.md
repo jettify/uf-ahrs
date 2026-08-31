@@ -110,6 +110,45 @@ fn main() {
 }
 ```
 
+## Sensor Calibration
+
+Accurate filter output requires calibrated sensor measurements. `InertialCalibration` applies
+misalignment, sensitivity, and offset correction to gyroscope or accelerometer readings, and
+`MagnetometerCalibration` applies soft-iron and hard-iron correction to magnetometer readings.
+Both default to an identity model (no correction), so they can be wired into a sensor pipeline
+unconditionally even before calibration coefficients are known.
+
+`uf-ahrs` does not provide a method to determine these coefficients; they must come from an
+external calibration procedure (datasheet, factory calibration, or a calibration routine run once
+per device).
+
+```rust
+use nalgebra::{Matrix3, Vector3};
+use uf_ahrs::{InertialCalibration, MagnetometerCalibration};
+
+fn main() {
+    let accel_cal = InertialCalibration {
+        misalignment: Matrix3::identity(),
+        sensitivity: Vector3::new(1.002, 0.998, 1.001),
+        offset: Vector3::new(0.01, -0.02, 0.03),
+    };
+    let mag_cal = MagnetometerCalibration {
+        soft_iron: Matrix3::identity(),
+        hard_iron: Vector3::new(2.0, -1.5, 0.5),
+    };
+
+    let raw_acc = Vector3::new(0.0, 0.0, 9.80);
+    let raw_mag = Vector3::new(22.0, -1.5, 0.5);
+
+    // Apply calibration before feeding the filter.
+    let acc = accel_cal.calibrate(raw_acc);
+    let mag = mag_cal.calibrate(raw_mag);
+
+    println!("acc: {acc:?}, mag: {mag:?}");
+}
+
+```
+
 ## Benchmark Scores (BROAD)
 
 The results below are from evaluations on the **Berlin Robust Orientation Estimation Assessment Dataset (BROAD)**.
