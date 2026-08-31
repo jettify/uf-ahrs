@@ -8,10 +8,14 @@
 mod madgwick;
 mod mahony;
 pub(crate) mod mean_init_lfp;
+mod remap;
 mod traits;
 mod vqf;
 
 pub use traits::{Ahrs, AhrsWithDt};
+
+pub use remap::Axis;
+pub use remap::AxisRemap;
 
 pub use madgwick::Madgwick;
 pub use madgwick::MadgwickParams;
