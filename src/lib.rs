@@ -5,6 +5,7 @@
 )]
 #![doc = include_str!("../README.md")]
 
+mod calibration;
 mod madgwick;
 mod mahony;
 pub(crate) mod mean_init_lfp;
@@ -12,6 +13,9 @@ mod traits;
 mod vqf;
 
 pub use traits::{Ahrs, AhrsWithDt};
+
+pub use calibration::InertialCalibration;
+pub use calibration::MagnetometerCalibration;
 
 pub use madgwick::Madgwick;
 pub use madgwick::MadgwickParams;
