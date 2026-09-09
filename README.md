@@ -118,6 +118,31 @@ fn main() {
     let mag = mag_cal.calibrate(raw_mag);
 
     println!("acc: {acc:?}, mag: {mag:?}");
+
+## Sensor Axis Remap
+
+Sensors are often mounted such that their axes are not aligned with the body axes (e.g. an IMU
+mounted rotated 90 degrees, or upside down, on a PCB). `AxisRemap` describes, for each body axis,
+which signed sensor axis it corresponds to, and applies the same permutation to gyroscope,
+accelerometer, and magnetometer readings, since all three sensors share the same rigid mounting
+frame.
+
+```rust
+use nalgebra::Vector3;
+use uf_ahrs::{Axis, AxisRemap};
+
+fn main() {
+    // IMU mounted rotated 90 degrees about Z relative to the airframe: the
+    // body's X axis reads the sensor's Y axis, and the body's Y axis reads
+    // the sensor's negated X axis.
+    let remap = AxisRemap::new(Axis::YPos, Axis::XNeg, Axis::ZPos).expect("valid permutation");
+
+    let raw_acc = Vector3::new(0.0, 0.0, 9.81);
+
+    // Remap into the body frame before feeding the filter.
+    let acc = remap.remap(raw_acc);
+
+    println!("acc: {acc:?}");
 }
 ```
 
