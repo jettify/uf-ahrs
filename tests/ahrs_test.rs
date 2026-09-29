@@ -332,3 +332,53 @@ fn test_vqf_update2_updates_orientation() {
     vqf.update2(Vector3::new(0.3, -0.1, 0.2), Vector3::new(0.1, 0.2, 9.8));
     assert!(vqf.orientation().angle_to(&initial) > 0.0);
 }
+
+#[test]
+fn test_madgwick_set_params_round_trip() {
+    let mut ahrs = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
+    let params = MadgwickParams { beta: 0.2 };
+    ahrs.set_params(params);
+    assert_eq!(ahrs.params(), params);
+}
+
+#[test]
+fn test_mahony_set_params_round_trip() {
+    let mut ahrs = Mahony::new(IMU_PERIOD, MahonyParams::default());
+    let params = MahonyParams { kp: 2.0, ki: 0.01 };
+    ahrs.set_params(params);
+    assert_eq!(ahrs.params(), params);
+}
+
+#[test]
+fn test_madgwick_set_params_takes_effect() {
+    // Start tilted 45 deg in roll while the accelerometer says level.
+    let tilted = UnitQuaternion::from_euler_angles(FRAC_PI_4, 0.0, 0.0);
+    let gyro = Vector3::new(0.0, 0.0, 0.0);
+    let accel = Vector3::new(0.0, 0.0, 1.0);
+    let mut ahrs = Madgwick::new_with_orientation(IMU_PERIOD, MadgwickParams { beta: 0.0 }, tilted);
+
+    // With zero gain the accelerometer is ignored: the tilt stays.
+    run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
+    assert_euler_close(ahrs.orientation(), FRAC_PI_4, 0.0, 0.0, EPS_GYRO);
+
+    // Raising the gain mid-run lets it converge to level.
+    ahrs.set_params(MadgwickParams { beta: 0.5 });
+    run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
+    assert_euler_close(ahrs.orientation(), 0.0, 0.0, 0.0, EPS_IMU);
+}
+
+#[test]
+fn test_mahony_set_params_takes_effect() {
+    let tilted = UnitQuaternion::from_euler_angles(FRAC_PI_4, 0.0, 0.0);
+    let gyro = Vector3::new(0.0, 0.0, 0.0);
+    let accel = Vector3::new(0.0, 0.0, 1.0);
+    let mut ahrs =
+        Mahony::new_with_orientation(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 }, tilted);
+
+    run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
+    assert_euler_close(ahrs.orientation(), FRAC_PI_4, 0.0, 0.0, EPS_GYRO);
+
+    ahrs.set_params(MahonyParams::default());
+    run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
+    assert_euler_close(ahrs.orientation(), 0.0, 0.0, 0.0, EPS_IMU);
+}

@@ -66,6 +66,19 @@ impl Mahony {
         }
     }
 
+    /// Returns the current tuning parameters.
+    #[must_use]
+    pub fn params(&self) -> MahonyParams {
+        self.params
+    }
+
+    /// Replaces the tuning parameters; they apply from the next update.
+    ///
+    /// The estimated gyroscope [`bias`](Self::bias) is kept.
+    pub fn set_params(&mut self, params: MahonyParams) {
+        self.params = params;
+    }
+
     fn update_gyro_with_dt_seconds(
         &mut self,
         gyroscope: Vector3<f32>,
