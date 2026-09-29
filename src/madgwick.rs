@@ -62,6 +62,20 @@ impl Madgwick {
             quaternion: orientation,
         }
     }
+
+    /// Returns the current tuning parameters.
+    #[must_use]
+    pub fn params(&self) -> MadgwickParams {
+        self.params
+    }
+
+    /// Replaces the tuning parameters; they apply from the next update.
+    ///
+    /// Useful for gain scheduling, e.g. reducing `beta` while the
+    /// accelerometer is dominated by non-gravitational acceleration.
+    pub fn set_params(&mut self, params: MadgwickParams) {
+        self.params = params;
+    }
 }
 
 impl Madgwick {
