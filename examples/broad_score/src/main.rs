@@ -123,15 +123,15 @@ fn evaluate_dataset(
         mag_y_val,
         mag_z_val,
     ) in izip!(
-        gyr_x.into_iter(),
-        gyr_y.into_iter(),
-        gyr_z.into_iter(),
-        acc_x.into_iter(),
-        acc_y.into_iter(),
-        acc_z.into_iter(),
-        mag_x.into_iter(),
-        mag_y.into_iter(),
-        mag_z.into_iter(),
+        gyr_x.iter(),
+        gyr_y.iter(),
+        gyr_z.iter(),
+        acc_x.iter(),
+        acc_y.iter(),
+        acc_z.iter(),
+        mag_x.iter(),
+        mag_y.iter(),
+        mag_z.iter(),
     ) {
         if let (
             Some(gx),
@@ -209,15 +209,15 @@ fn analyze_results(df: &DataFrame) -> Result<RmseScore, Box<dyn Error>> {
     let movement = df.column("movement")?.f32()?;
 
     for (comp_w, comp_x, comp_y, comp_z, opt_w, opt_x, opt_y, opt_z, mov) in izip!(
-        computed_w.into_iter(),
-        computed_x.into_iter(),
-        computed_y.into_iter(),
-        computed_z.into_iter(),
-        opt_w.into_iter(),
-        opt_x.into_iter(),
-        opt_y.into_iter(),
-        opt_z.into_iter(),
-        movement.into_iter()
+        computed_w.iter(),
+        computed_x.iter(),
+        computed_y.iter(),
+        computed_z.iter(),
+        opt_w.iter(),
+        opt_x.iter(),
+        opt_y.iter(),
+        opt_z.iter(),
+        movement.iter()
     ) {
         if let (
             Some(comp_w),

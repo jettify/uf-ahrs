@@ -24,13 +24,13 @@ include = [
 ]
 
 [dependencies]
-idsp = "0.22.0"
+idsp = "0.23.1"
 libm = "0.2.15"
 nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
 
 [dev-dependencies]
 approx = "0.5.1"
-rstest = "0.26.1"
+rstest = "0.27.0"
 
 [lints.clippy]
 unwrap_used = "forbid"
