@@ -1,5 +1,4 @@
 use crate::traits::Ahrs;
-use core::f32;
 use core::time::Duration;
 use libm::{cosf, powf, sinf, sqrtf};
 

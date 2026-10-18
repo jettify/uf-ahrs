@@ -1,4 +1,3 @@
-use core::f32;
 use core::time::Duration;
 
 use crate::traits::{Ahrs, AhrsWithDt};
