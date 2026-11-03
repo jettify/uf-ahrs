@@ -13,8 +13,9 @@ use nalgebra::Vector3;
 /// to wire an [`InertialCalibration`] into a sensor pipeline even before
 /// real calibration coefficients are known.
 ///
-/// This model does not determine calibration coefficients; it only applies
-/// coefficients determined by an external calibration procedure.
+/// This model only applies calibration coefficients. A stationary gyroscope
+/// offset can be determined with [`crate::GyroBiasCalibration`]; other
+/// coefficients require an external calibration procedure.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct InertialCalibration {
     /// Misalignment matrix correcting for non-orthogonality between sensor
