@@ -6,6 +6,7 @@
 #![doc = include_str!("../README.md")]
 
 mod calibration;
+mod gyro_bias_calibration;
 mod madgwick;
 mod mahony;
 pub(crate) mod mean_init_lfp;
@@ -18,6 +19,10 @@ pub use traits::AhrsWithDt;
 
 pub use calibration::InertialCalibration;
 pub use calibration::MagnetometerCalibration;
+pub use gyro_bias_calibration::GyroBiasCalibration;
+pub use gyro_bias_calibration::GyroBiasCalibrationError;
+pub use gyro_bias_calibration::GyroBiasCalibrationParams;
+pub use gyro_bias_calibration::GyroBiasCalibrationStatus;
 pub use remap::Axis;
 pub use remap::AxisRemap;
 
