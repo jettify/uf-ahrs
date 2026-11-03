@@ -1,6 +1,7 @@
 use core::time::Duration;
 
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::UnitQuaternion;
+use nalgebra::Vector3;
 
 /// Common interface for AHRS filters that estimate orientation from IMU/MARG data.
 pub trait Ahrs {

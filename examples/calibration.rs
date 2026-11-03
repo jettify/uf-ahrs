@@ -1,6 +1,11 @@
 use core::time::Duration;
-use nalgebra::{Matrix3, Vector3};
-use uf_ahrs::{Ahrs, InertialCalibration, MagnetometerCalibration, Mahony, MahonyParams};
+use nalgebra::Matrix3;
+use nalgebra::Vector3;
+use uf_ahrs::Ahrs;
+use uf_ahrs::InertialCalibration;
+use uf_ahrs::MagnetometerCalibration;
+use uf_ahrs::Mahony;
+use uf_ahrs::MahonyParams;
 
 fn main() {
     let dt = Duration::from_secs_f32(1.0 / 100.0);

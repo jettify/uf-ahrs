@@ -1,7 +1,15 @@
 use core::time::Duration;
 
-use crate::traits::{Ahrs, AhrsWithDt};
-use nalgebra::{Matrix4, Matrix6, Quaternion, UnitQuaternion, Vector2, Vector3, Vector4, Vector6};
+use crate::traits::Ahrs;
+use crate::traits::AhrsWithDt;
+use nalgebra::Matrix4;
+use nalgebra::Matrix6;
+use nalgebra::Quaternion;
+use nalgebra::UnitQuaternion;
+use nalgebra::Vector2;
+use nalgebra::Vector3;
+use nalgebra::Vector4;
+use nalgebra::Vector6;
 
 /// Tuning parameters for the [`Madgwick`] filter.
 #[derive(Debug, Copy, Clone, PartialEq)]

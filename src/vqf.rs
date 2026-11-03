@@ -1,10 +1,20 @@
 use crate::traits::Ahrs;
 use core::time::Duration;
-use libm::{cosf, powf, sinf, sqrtf};
+use libm::cosf;
+use libm::powf;
+use libm::sinf;
+use libm::sqrtf;
 
-use nalgebra::{Matrix3, Quaternion, SVector, SimdPartialOrd, UnitQuaternion, Vector2, Vector3};
+use nalgebra::Matrix3;
+use nalgebra::Quaternion;
+use nalgebra::SVector;
+use nalgebra::SimdPartialOrd;
+use nalgebra::UnitQuaternion;
+use nalgebra::Vector2;
+use nalgebra::Vector3;
 
-use crate::mean_init_lfp::{MeanInitializedLowPassFilter, second_order_butterworth};
+use crate::mean_init_lfp::MeanInitializedLowPassFilter;
+use crate::mean_init_lfp::second_order_butterworth;
 
 const BIAS_SCALE: f32 = 100.0;
 
@@ -864,7 +874,8 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     use core::time::Duration;
-    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::panic::AssertUnwindSafe;
+    use std::panic::catch_unwind;
 
     #[test]
     fn test_gyro_update_applies_bias() {

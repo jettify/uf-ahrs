@@ -6,7 +6,12 @@
 use core::time::Duration;
 
 use nalgebra::Vector3;
-use uf_ahrs::{Ahrs, AhrsWithDt, Madgwick, MadgwickParams, Mahony, MahonyParams};
+use uf_ahrs::Ahrs;
+use uf_ahrs::AhrsWithDt;
+use uf_ahrs::Madgwick;
+use uf_ahrs::MadgwickParams;
+use uf_ahrs::Mahony;
+use uf_ahrs::MahonyParams;
 
 fn main() {
     let nominal_dt = Duration::from_millis(10);

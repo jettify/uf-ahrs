@@ -1,7 +1,11 @@
 use core::time::Duration;
 
-use crate::traits::{Ahrs, AhrsWithDt};
-use nalgebra::{Quaternion, UnitQuaternion, Vector2, Vector3};
+use crate::traits::Ahrs;
+use crate::traits::AhrsWithDt;
+use nalgebra::Quaternion;
+use nalgebra::UnitQuaternion;
+use nalgebra::Vector2;
+use nalgebra::Vector3;
 
 /// Tuning parameters for the [`Mahony`] filter.
 #[derive(Debug, Copy, Clone, PartialEq)]

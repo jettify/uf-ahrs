@@ -1,4 +1,5 @@
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::Matrix3;
+use nalgebra::Vector3;
 
 /// Calibration model for gyroscope or accelerometer measurements.
 ///

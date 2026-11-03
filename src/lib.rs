@@ -13,7 +13,8 @@ mod remap;
 mod traits;
 mod vqf;
 
-pub use traits::{Ahrs, AhrsWithDt};
+pub use traits::Ahrs;
+pub use traits::AhrsWithDt;
 
 pub use calibration::InertialCalibration;
 pub use calibration::MagnetometerCalibration;

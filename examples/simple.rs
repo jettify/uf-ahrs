@@ -1,6 +1,12 @@
 use core::time::Duration;
 use nalgebra::Vector3;
-use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
+use uf_ahrs::Ahrs;
+use uf_ahrs::Madgwick;
+use uf_ahrs::MadgwickParams;
+use uf_ahrs::Mahony;
+use uf_ahrs::MahonyParams;
+use uf_ahrs::Vqf;
+use uf_ahrs::VqfParams;
 
 fn main() {
     let dt = Duration::from_secs_f32(1.0 / 100.0);

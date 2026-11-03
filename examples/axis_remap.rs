@@ -1,6 +1,10 @@
 use core::time::Duration;
 use nalgebra::Vector3;
-use uf_ahrs::{Ahrs, Axis, AxisRemap, Mahony, MahonyParams};
+use uf_ahrs::Ahrs;
+use uf_ahrs::Axis;
+use uf_ahrs::AxisRemap;
+use uf_ahrs::Mahony;
+use uf_ahrs::MahonyParams;
 
 fn main() {
     let dt = Duration::from_secs_f32(1.0 / 100.0);
