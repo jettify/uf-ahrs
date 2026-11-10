@@ -3,6 +3,7 @@ extern crate std;
 
 use core::f32::consts::FRAC_PI_2;
 use core::f32::consts::FRAC_PI_4;
+use core::f32::consts::PI;
 use core::time::Duration;
 
 use approx::assert_abs_diff_eq;
@@ -235,6 +236,237 @@ fn test_set_orientation_round_trip(#[case] mut ahrs: AhrsBox) {
     let expected = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
     ahrs.set_orientation(expected);
     assert_relative_eq!(ahrs.orientation(), expected);
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_heading_magnetometer_level_headings(#[case] ahrs: AhrsBox) {
+    for (heading, expected) in [
+        (0.0, Vector3::x()),
+        (FRAC_PI_2, -Vector3::y()),
+        (PI, -Vector3::x()),
+        (3.0 * FRAC_PI_2, Vector3::y()),
+        (-FRAC_PI_2, Vector3::y()),
+        (5.0 * FRAC_PI_2, -Vector3::y()),
+    ] {
+        assert_relative_eq!(ahrs.heading_magnetometer(heading), expected, epsilon = 1e-6);
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_heading_magnetometer_matches_tilt_compensated_reference(#[case] mut ahrs: AhrsBox) {
+    // Include inverted attitudes and pitch outside the canonical Euler range.
+    for (roll, pitch) in [(0.4, -0.7), (-1.2, 0.8), (2.8, -0.3), (0.5, 2.0)] {
+        for yaw in [-2.0, 0.0, 1.3] {
+            let orientation = UnitQuaternion::from_euler_angles(roll, pitch, yaw);
+            ahrs.set_orientation(orientation);
+            let (canonical_roll, canonical_pitch, _) = orientation.euler_angles();
+            for heading in [
+                -135.0_f32.to_radians(),
+                0.0,
+                60.0_f32.to_radians(),
+                420.0_f32.to_radians(),
+            ] {
+                let target =
+                    UnitQuaternion::from_euler_angles(canonical_roll, canonical_pitch, heading);
+                let mag = ahrs.heading_magnetometer(heading);
+                assert_relative_eq!(
+                    mag,
+                    target.inverse_transform_vector(&Vector3::x()),
+                    epsilon = 1e-6
+                );
+                assert_relative_eq!(target * mag, Vector3::x(), epsilon = 1e-6);
+                assert_relative_eq!(mag.norm(), 1.0, epsilon = 1e-6);
+                assert_relative_eq!(ahrs.orientation(), orientation, epsilon = 1e-6);
+            }
+        }
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_heading_magnetometer_zero_pitch_matches_original_formula(#[case] mut ahrs: AhrsBox) {
+    for roll in [-2.0_f32, -0.5, 0.0, 0.8, 2.5] {
+        let heading = 63.0_f32.to_radians();
+        let expected = Vector3::new(
+            libm::cosf(heading),
+            -libm::cosf(roll) * libm::sinf(heading),
+            libm::sinf(heading) * libm::sinf(roll),
+        );
+        for yaw in [-1.5, 0.0, 2.0] {
+            ahrs.set_orientation(UnitQuaternion::from_euler_angles(roll, 0.0, yaw));
+            assert_relative_eq!(ahrs.heading_magnetometer(heading), expected, epsilon = 1e-6);
+        }
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_heading_magnetometer_quaternion_sign_invariance(#[case] mut ahrs: AhrsBox) {
+    let orientation = UnitQuaternion::from_euler_angles(0.4, -0.7, 1.2);
+    let heading = 75.0_f32.to_radians();
+    ahrs.set_orientation(orientation);
+    let positive = ahrs.heading_magnetometer(heading);
+    ahrs.set_orientation(UnitQuaternion::new_unchecked(-orientation.into_inner()));
+    assert_relative_eq!(ahrs.heading_magnetometer(heading), positive, epsilon = 1e-6);
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_heading_magnetometer_vertical_threshold(#[case] mut ahrs: AhrsBox) {
+    for sign in [-1.0, 1.0] {
+        // Test both sides of vertical and both sides of the exclusion threshold.
+        for offset in [-0.002, -0.0011, -0.0009, 0.0, 0.0009, 0.0011, 0.002] {
+            ahrs.set_orientation(UnitQuaternion::from_euler_angles(
+                0.4,
+                sign * FRAC_PI_2 + offset,
+                0.8,
+            ));
+            let mag = ahrs.heading_magnetometer(120.0_f32.to_radians());
+            assert!(mag.iter().all(|value| value.is_finite()));
+            if libm::fabsf(offset) < 0.001 {
+                assert_eq!(mag, Vector3::zeros());
+            } else {
+                assert_relative_eq!(mag.norm(), 1.0, epsilon = 1e-6);
+            }
+        }
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu(), mahony_imu())]
+#[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::vqf(vqf_imu(), vqf_imu())]
+fn test_update_external_heading_matches_manual_update(
+    #[case] mut external: AhrsBox,
+    #[case] mut manual: AhrsBox,
+) {
+    let initial = UnitQuaternion::from_euler_angles(0.2, -0.3, 0.4);
+    external.set_orientation(initial);
+    manual.set_orientation(initial);
+    let gyro = Vector3::new(0.01, -0.02, 0.03);
+    let accel = initial.inverse_transform_vector(&Vector3::new(0.0, 0.0, 9.81));
+    for heading in [
+        30.0_f32.to_radians(),
+        60.0_f32.to_radians(),
+        -45.0_f32.to_radians(),
+        100.0_f32.to_radians(),
+    ] {
+        let mag = manual.heading_magnetometer(heading);
+        let expected = manual.update(gyro, accel, mag);
+        let actual = external.update_external_heading(gyro, accel, heading);
+        assert_relative_eq!(actual, expected, epsilon = 1e-6);
+        assert_relative_eq!(external.orientation(), expected, epsilon = 1e-6);
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu(), mahony_imu())]
+#[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::vqf(vqf_imu(), vqf_imu())]
+fn test_update_external_heading_vertical_matches_imu_update(
+    #[case] mut external: AhrsBox,
+    #[case] mut imu: AhrsBox,
+) {
+    for pitch in [-FRAC_PI_2, FRAC_PI_2] {
+        let initial = UnitQuaternion::from_euler_angles(0.4, pitch, 0.8);
+        external.set_orientation(initial);
+        imu.set_orientation(initial);
+        let gyro = Vector3::new(0.01, -0.02, 0.03);
+        let accel = initial.inverse_transform_vector(&Vector3::new(0.0, 0.0, 9.81));
+        let expected = imu.update_imu(gyro, accel);
+        let actual = external.update_external_heading(gyro, accel, 120.0_f32.to_radians());
+        assert_relative_eq!(actual, expected, epsilon = 1e-6);
+        assert_relative_eq!(external.orientation(), expected, epsilon = 1e-6);
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu(), mahony_imu())]
+#[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::vqf(vqf_imu(), vqf_imu())]
+fn test_nonfinite_external_heading_falls_back_to_imu_update(
+    #[case] mut external: AhrsBox,
+    #[case] mut imu: AhrsBox,
+) {
+    let initial = UnitQuaternion::from_euler_angles(0.2, -0.3, 0.4);
+    external.set_orientation(initial);
+    imu.set_orientation(initial);
+    let gyro = Vector3::new(0.01, -0.02, 0.03);
+    let accel = initial.inverse_transform_vector(&Vector3::new(0.0, 0.0, 9.81));
+
+    for heading in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        assert_eq!(external.heading_magnetometer(heading), Vector3::zeros());
+        let expected = imu.update_imu(gyro, accel);
+        let actual = external.update_external_heading(gyro, accel, heading);
+        assert_relative_eq!(actual, expected, epsilon = 1e-6);
+        assert_relative_eq!(external.orientation(), expected, epsilon = 1e-6);
+    }
+}
+
+#[rstest]
+#[case::mahony(mahony_imu())]
+#[case::madgwick(madgwick_imu())]
+#[case::vqf(vqf_imu())]
+fn test_update_external_heading_converges_when_tilted(#[case] mut ahrs: AhrsBox) {
+    let expected_roll = 0.3;
+    let expected_pitch = -0.2;
+    let expected_yaw = FRAC_PI_2;
+    let true_attitude =
+        UnitQuaternion::from_euler_angles(expected_roll, expected_pitch, expected_yaw);
+
+    let gyro = Vector3::zeros();
+    let accel = true_attitude.inverse_transform_vector(&Vector3::new(0.0, 0.0, 9.81));
+
+    for _ in 0..UPDATE_STEPS {
+        ahrs.update_external_heading(gyro, accel, expected_yaw);
+    }
+
+    assert_euler_close(
+        ahrs.orientation(),
+        expected_roll,
+        expected_pitch,
+        expected_yaw,
+        EPS_UPDATE,
+    );
+}
+
+#[test]
+fn test_update_external_heading_with_dt_matches_manual_update() {
+    let dt = Duration::from_millis(20);
+    let initial = UnitQuaternion::from_euler_angles(0.2, -0.3, 0.4);
+    let gyro = Vector3::new(0.01, -0.02, 0.03);
+    let accel = initial.inverse_transform_vector(&Vector3::new(0.0, 0.0, 9.81));
+    let heading = 60.0_f32.to_radians();
+
+    let mut mahony_external =
+        Mahony::new_with_orientation(IMU_PERIOD, MahonyParams::default(), initial);
+    let mut mahony_manual =
+        Mahony::new_with_orientation(IMU_PERIOD, MahonyParams::default(), initial);
+    let mag = mahony_manual.heading_magnetometer(heading);
+    let expected = mahony_manual.update_with_dt(dt, gyro, accel, mag);
+    let actual = mahony_external.update_external_heading_with_dt(dt, gyro, accel, heading);
+    assert_relative_eq!(actual, expected, epsilon = 1e-6);
+
+    let mut madgwick_external =
+        Madgwick::new_with_orientation(IMU_PERIOD, MadgwickParams::default(), initial);
+    let mut madgwick_manual =
+        Madgwick::new_with_orientation(IMU_PERIOD, MadgwickParams::default(), initial);
+    let mag = madgwick_manual.heading_magnetometer(heading);
+    let expected = madgwick_manual.update_with_dt(dt, gyro, accel, mag);
+    let actual = madgwick_external.update_external_heading_with_dt(dt, gyro, accel, heading);
+    assert_relative_eq!(actual, expected, epsilon = 1e-6);
 }
 
 #[test]
