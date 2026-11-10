@@ -22,6 +22,8 @@ pub use calibration::MagnetometerCalibration;
 pub use gyro_bias_calibration::GyroBiasCalibration;
 pub use gyro_bias_calibration::GyroBiasCalibrationError;
 pub use gyro_bias_calibration::GyroBiasCalibrationParams;
+pub use gyro_bias_calibration::GyroBiasCalibrationRejectionReason;
+pub use gyro_bias_calibration::GyroBiasCalibrationStatistics;
 pub use gyro_bias_calibration::GyroBiasCalibrationStatus;
 pub use remap::Axis;
 pub use remap::AxisRemap;
