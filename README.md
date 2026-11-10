@@ -5,7 +5,7 @@
 [![crates.io](https://img.shields.io/crates/v/uf-ahrs)](https://crates.io/crates/uf-ahrs)
 [![docs.rs](https://img.shields.io/docsrs/uf-ahrs)](https://docs.rs/uf-ahrs/latest/uf_ahrs/)
 
-`uf-ahrs` rust `no_std` library for orientation estimation using gyroscope, accelerometer and magnetometer.
+`uf-ahrs` is an allocator-free, `no_std` Rust library for attitude and heading estimation (AHRS) in embedded systems, robotics, and flight controllers. It provides Mahony, Madgwick, and VQF sensor fusion filters with a shared API and `nalgebra` quaternion output, supporting gyroscope and accelerometer data with optional magnetometer or external heading input.
 
 ## Demo
 
@@ -15,14 +15,17 @@
 
 ## Features
 
-* `no_std` and allocator-free for embedded systems.
-* IO and MCU agnostic.
-* Implements `Mahony`, `Madgwick` and `VQF` filters.
-* Filters evaluated using `BROAD` dataset.
+* `no_std` and allocator-free, with no dependency on a specific MCU or sensor driver.
+* `Mahony`, `Madgwick`, and `Vqf` filters behind a shared `Ahrs` interface.
+* Gyroscope-only, IMU (gyroscope + accelerometer), and IMU + magnetometer updates.
+* External heading input for heading correction without a magnetometer.
+* VQF gyroscope bias estimation during motion and rest, plus magnetic disturbance rejection.
+* Sensor axis remapping, inertial and magnetometer calibration, and stationary gyroscope bias calibration.
+* Accuracy evaluated on the BROAD dataset and embedded performance measured on STM32F411.
 
-## Note
+## API stability
 
-Library is under active development and testing, API might change at any time.
+The library is under active development. The API may change between releases.
 
 ## Installation
 
@@ -30,7 +33,7 @@ Add `uf-ahrs` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-uf-ahrs = "*" # replace * by the latest version of the crate.
+uf-ahrs = "*" # Replace * with the version you want to use.
 ```
 
 Or use the command line:
@@ -39,66 +42,60 @@ Or use the command line:
 cargo add uf-ahrs
 ```
 
-## Usage
+## Quick start
 
-Here is a simple example showing how to initialize and use `Mahony`, `Madgwick`, and `VQF` filters.
+Create a filter with a sample period, then call `update` for each sensor sample.
+This example uses the Mahony filter at 100 Hz and returns orientation as a `UnitQuaternion<f32>`.
 
 > **Note on units**
 >
-> - Gyroscope data must be in **rad/s**
+> - Gyroscope data must be in **rad/s**.
 > - Accelerometer and magnetometer units do not matter, as long as they are consistent.
 >   The filters normalize these vectors internally.
 
 ```rust
 use core::time::Duration;
 use nalgebra::Vector3;
-use uf_ahrs::{Ahrs, Madgwick, MadgwickParams, Mahony, MahonyParams, Vqf, VqfParams};
+use uf_ahrs::{Ahrs, Mahony, MahonyParams};
 
 fn main() {
     let dt = Duration::from_secs_f32(1.0 / 100.0);
 
-    let mut mahony = Mahony::new(dt, MahonyParams::default());
-    let mut madgwick = Madgwick::new(dt, MadgwickParams::default());
-    let mut vqf = Vqf::new(dt, VqfParams::default());
+    let mut filter = Mahony::new(dt, MahonyParams::default());
 
-    // Sensor data
-    let gyr = Vector3::new(0.0, 0.0, 0.0);     // rad/s
-    let acc = Vector3::new(0.0, 0.0, 9.81);
+    let gyro = Vector3::new(0.0, 0.0, 0.0); // rad/s
+    let accel = Vector3::new(0.0, 0.0, 9.81);
     let mag = Vector3::new(20.0, 0.0, 0.0);
 
-    mahony.update(gyr, acc, mag);
-    madgwick.update(gyr, acc, mag);
-    vqf.update(gyr, acc, mag);
+    let orientation = filter.update(gyro, accel, mag);
 
-    // Get orientation as UnitQuaternion
-    let q_mahony = mahony.orientation();
-    let q_madgwick = madgwick.orientation();
-    let q_vqf = vqf.orientation();
-
-    // std::println used  only for example purposes, library itself
-    // is fully no_std compatible.
-    println!("Mahony:   {:?}", q_mahony.euler_angles());
-    println!("Madgwick: {:?}", q_madgwick.euler_angles());
-    println!("VQF:      {:?}", q_vqf.euler_angles());
+    // Printing requires std; the library itself is no_std.
+    println!("Roll, pitch, yaw (radians): {:?}", orientation.euler_angles());
 }
 ```
 
+To use another filter, replace the import and constructor:
+
+* Madgwick: import `Madgwick` and `MadgwickParams`, then use `Madgwick::new(dt, MadgwickParams::default())`.
+* VQF: import `Vqf` and `VqfParams`, then use `Vqf::new(dt, VqfParams::default())`.
+
+All three filters implement `Ahrs`, so the update call stays the same.
+Without a magnetometer, call `filter.update_imu(gyro, accel)`.
+
 ## Sensor Axis Remap
 
-Sensors are often mounted such that their axes are not aligned with the body axes (e.g. an IMU
-mounted rotated 90 degrees, or upside down, on a PCB). `AxisRemap` describes, for each body axis,
-which signed sensor axis it corresponds to, and applies the same permutation to gyroscope,
-accelerometer, and magnetometer readings, since all three sensors share the same rigid mounting
-frame.
+Use `AxisRemap` when sensor axes differ from body axes, such as when an IMU is mounted
+rotated or upside down. For each body axis, specify the sensor axis and its sign.
+Apply the remap before feeding readings into the filter. Sensors with the same axis
+alignment can share a remap.
 
 ```rust
 use nalgebra::Vector3;
 use uf_ahrs::{Axis, AxisRemap};
 
 fn main() {
-    // IMU mounted rotated 90 degrees about Z relative to the airframe: the
-    // body's X axis reads the sensor's Y axis, and the body's Y axis reads
-    // the sensor's negated X axis.
+    // 90-degree mounting rotation about Z: body X = sensor Y,
+    // body Y = -sensor X, body Z = sensor Z.
     let remap = AxisRemap::new(Axis::YPos, Axis::XNeg, Axis::ZPos).expect("valid permutation");
 
     let raw_acc = Vector3::new(0.0, 0.0, 9.81);
@@ -216,7 +213,7 @@ calibration window from scoring). Run `just eval` to reproduce.
 For context, BROAD contains **39 trials** with synchronized IMU and optical ground-truth orientation:
 **23 undisturbed trials** (rotation, translation, and combined motion at slow/fast speeds) and
 **16 disturbed trials** (e.g., tapping, vibration, stationary/attached magnets, office environment, and mixed conditions).
-Dataset publication: [https://www.mdpi.com/2306-5729/6/7/72](https://www.mdpi.com/2306-5729/6/7/72).
+See the [BROAD dataset publication](https://www.mdpi.com/2306-5729/6/7/72) for details.
 
 Reported metrics are dataset-averaged orientation errors in degrees:
 `AVG Total RMSE`, `AVG Heading RMSE`, and `AVG Inclination RMSE`.
@@ -253,18 +250,23 @@ Algorithm: Vqf (startup calibration on, 39 recordings)
 Measured on an `STM32F411CEUx` Black Pill using the DWT cycle counter. The
 benchmark configures the chip to run at `100 MHz`.
 
+### Execution time
+
 | Filter | Update | Cycles/update | Time/update at 100 MHz |
 | --- | --- | ---: | ---: |
-| Mahony | IMU | 638 | 6.38 us |
-| Mahony | IMU + magnetometer | 1029 | 10.29 us |
-| Madgwick | IMU | 817 | 8.17 us |
-| Madgwick | IMU + magnetometer | 1299 | 12.99 us |
-| VQF | IMU | 4413 | 44.13 us |
-| VQF | IMU + magnetometer | 10282 | 102.82 us |
+| Mahony | IMU | 638 | 6.38 µs |
+| Mahony | IMU + magnetometer | 1029 | 10.29 µs |
+| Madgwick | IMU | 817 | 8.17 µs |
+| Madgwick | IMU + magnetometer | 1299 | 12.99 µs |
+| VQF | IMU | 4413 | 44.13 µs |
+| VQF | IMU + magnetometer | 10282 | 102.82 µs |
 
-Following numbers are from `cargo size --release --no-default-features` with `defmt`
-disabled, flash is `text + data`, and the delta is measured relative to `size-base`.
-Static RAM is `data + bss` reported by `cargo size`; it does not include the runtime stack.
+### Memory usage
+
+These measurements use `cargo size --release --no-default-features` with `defmt` disabled.
+Flash total is `text + data`. Static RAM is `data + bss` and excludes the runtime stack.
+
+Flash delta is the additional flash used compared with the `size-base` firmware shown in the first row.
 
 | Experiment | Flash total | Flash delta vs base | Static RAM |
 | --- | ---: | ---: | ---: |
@@ -276,10 +278,9 @@ Static RAM is `data + bss` reported by `cargo size`; it does not include the run
 | VQF IMU | `28_844` B | `26_288` B | 4 B |
 | VQF IMU + magnetometer | `32_356` B | `29_800` B | 4 B |
 
-
 ## License
 
-This project is licensed under the `Apache 2.0`. See the [LICENSE](https://github.com/jettify/uf-ahrs/blob/master/LICENSE) file for details.
+Licensed under Apache 2.0. See [LICENSE](https://github.com/jettify/uf-ahrs/blob/master/LICENSE) for details.
 
 ## References
 
