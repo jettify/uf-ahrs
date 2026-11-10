@@ -7,21 +7,37 @@ mod fmt;
 use core::time::Duration;
 
 use embassy_executor::Spawner;
+use embassy_stm32::bind_interrupts;
+use embassy_stm32::dma;
 use embassy_stm32::exti;
-use embassy_stm32::gpio::{Level, Output, Pull, Speed};
+use embassy_stm32::gpio::Level;
+use embassy_stm32::gpio::Output;
+use embassy_stm32::gpio::Pull;
+use embassy_stm32::gpio::Speed;
 use embassy_stm32::interrupt;
+use embassy_stm32::peripherals;
+use embassy_stm32::spi;
 use embassy_stm32::time::mhz;
 use embassy_stm32::Config as StmConfig;
-use embassy_stm32::{bind_interrupts, dma, peripherals, spi};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Delay, Timer};
+use embassy_time::Delay;
+use embassy_time::Timer;
 
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use nalgebra::{UnitQuaternion, Vector3};
-use uf_ahrs::{Ahrs, Mahony, MahonyParams};
+use nalgebra::UnitQuaternion;
+use nalgebra::Vector3;
+use uf_ahrs::Ahrs;
+use uf_ahrs::GyroBiasCalibration;
+use uf_ahrs::GyroBiasCalibrationParams;
+use uf_ahrs::GyroBiasCalibrationRejectionReason;
+use uf_ahrs::GyroBiasCalibrationStatus;
+use uf_ahrs::InertialCalibration;
+use uf_ahrs::Mahony;
+use uf_ahrs::MahonyParams;
 
-use {defmt_rtt as _, panic_probe as _};
+use defmt_rtt as _;
+use panic_probe as _;
 
 bind_interrupts!(struct Irqs {
     DMA1_STREAM3 => dma::InterruptHandler<peripherals::DMA1_CH3>;
@@ -64,6 +80,9 @@ fn log_orientation(orientation: UnitQuaternion<f32>) {
 const SPI_FREQ_MHZ: u32 = 10;
 const IMU_ODR_HZ: f32 = 8000.0;
 const LOG_EVERY_N_SAMPLES: u32 = 200;
+// ICM-42688-P gyroscope rate noise spectral density: 0.0028 deg/s/√Hz ≈ 4.8869e-5 rad/s/√Hz.
+const ICM42688_GYRO_NSD_RAD_S_SQRT_HZ: f32 = 4.8869e-5;
+const CALIBRATION_DURATION: Duration = Duration::from_millis(1250);
 
 fn corrected_fifo_temp_celsius(driver_temp_celsius: f32) -> f32 {
     // Temporary workaround for icm426xx 0.4.0:
@@ -73,12 +92,71 @@ fn corrected_fifo_temp_celsius(driver_temp_celsius: f32) -> f32 {
     ((driver_temp_celsius - 25.0) / 64.0) + 25.0
 }
 
-fn process_sample(sample: &icm426xx::Sample, mahony: &mut Mahony, log_decimation: &mut u32) -> bool {
+fn log_rejection(reason: GyroBiasCalibrationRejectionReason) {
+    match reason {
+        GyroBiasCalibrationRejectionReason::StandardDeviation { value, threshold } => {
+            info!(
+                "gyro calibration rejected (std dev): {} > {} rad/s; retrying",
+                value, threshold
+            );
+        }
+        GyroBiasCalibrationRejectionReason::DriftRate { value, threshold } => {
+            info!(
+                "gyro calibration rejected (drift): {} > {} rad/s^2; retrying",
+                value, threshold
+            );
+        }
+        GyroBiasCalibrationRejectionReason::PeakToPeak { value, threshold } => {
+            info!(
+                "gyro calibration rejected (peak-to-peak): {} > {} rad/s; retrying",
+                value, threshold
+            );
+        }
+    }
+}
+
+fn step_gyro_calibration(
+    sample: &icm426xx::Sample,
+    sample_period: Duration,
+    calibrator: &mut GyroBiasCalibration,
+) -> Option<InertialCalibration> {
+    let (gx, gy, gz) = sample.gyro?;
+    let raw_gyro = Vector3::new(gx, gy, gz);
+
+    match calibrator.update(sample_period, raw_gyro) {
+        GyroBiasCalibrationStatus::Collecting => None,
+        GyroBiasCalibrationStatus::Rejected(reason) => {
+            log_rejection(reason);
+            None
+        }
+        GyroBiasCalibrationStatus::InvalidSample => {
+            info!("gyro calibration encountered invalid sample; retrying");
+            None
+        }
+        GyroBiasCalibrationStatus::Complete(offset) => {
+            info!(
+                "gyro bias calibrated (rad/s): x={} y={} z={}",
+                offset.x, offset.y, offset.z
+            );
+            Some(InertialCalibration {
+                offset,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+fn process_sample(
+    sample: &icm426xx::Sample,
+    gyro_calibration: &InertialCalibration,
+    mahony: &mut Mahony,
+    log_decimation: &mut u32,
+) -> bool {
     *log_decimation = log_decimation.wrapping_add(1);
     let should_log = log_decimation.is_multiple_of(LOG_EVERY_N_SAMPLES);
 
     if let (Some((gx, gy, gz)), Some((ax, ay, az))) = (sample.gyro, sample.accel) {
-        let gyro = Vector3::new(gx, gy, gz);
+        let gyro = gyro_calibration.calibrate(Vector3::new(gx, gy, gz));
         let accel = Vector3::new(ax, ay, az);
         let orientation = mahony.update_imu(gyro, accel);
 
@@ -139,9 +217,18 @@ async fn main(spawner: Spawner) {
         timestamps_are_absolute: false,
     };
     let mut icm = icm.initialize(Delay, imu_config).await.unwrap();
-    let mahony_params = MahonyParams::default();
     let sample_period = Duration::from_secs_f32(1.0 / IMU_ODR_HZ);
-    let mut mahony = Mahony::new(sample_period, mahony_params);
+    let mut mahony = Mahony::new(sample_period, MahonyParams::default());
+
+    let calibration_params = GyroBiasCalibrationParams::from_noise_density(
+        CALIBRATION_DURATION,
+        sample_period,
+        ICM42688_GYRO_NSD_RAD_S_SQRT_HZ,
+    )
+    .unwrap();
+    let mut calibrator = GyroBiasCalibration::new(calibration_params).unwrap();
+    let mut gyro_calibration: Option<InertialCalibration> = None;
+    info!("collecting stationary gyro bias calibration...");
 
     let mut gyro_drdy = exti::ExtiInput::new(p.PB2, p.EXTI2, Pull::None, Irqs);
     gyro_drdy.wait_for_low().await;
@@ -156,7 +243,13 @@ async fn main(spawner: Spawner) {
         loop {
             match icm.read_sample().await {
                 Ok(Some((sample, has_more))) => {
-                    let _ = process_sample(&sample, &mut mahony, &mut log_decimation);
+                    if let Some(calibration) = &gyro_calibration {
+                        let _ =
+                            process_sample(&sample, calibration, &mut mahony, &mut log_decimation);
+                    } else {
+                        gyro_calibration =
+                            step_gyro_calibration(&sample, sample_period, &mut calibrator);
+                    }
                     if !has_more {
                         break;
                     }
@@ -164,6 +257,9 @@ async fn main(spawner: Spawner) {
                 Ok(None) => break,
                 Err(icm426xx::Error::FifoOverflow) => {
                     info!("imu fifo overflow; flushing");
+                    if gyro_calibration.is_none() {
+                        calibrator.reset();
+                    }
                     let _ = icm.reset_fifo().await;
                     break;
                 }
