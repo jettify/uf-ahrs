@@ -85,6 +85,11 @@ impl GyroBiasCalibrationParams {
             .div_ceil(sample_period.as_nanos())
             .max(u128::from(min_samples)) as f64;
         let fs = 1.0 / sample_period.as_secs_f64();
+        // Theoretical white-noise RMS is NSD * sqrt(ENBW), where ENBW = 0.5 * fs
+        // is the Nyquist bandwidth. The 1.6 multiplier is an empirical PCB/system
+        // noise margin (+60%) accounting for power-supply ripple, ADC quantization,
+        // package stress, and minor board-level micro-vibrations above ideal lab
+        // datasheet conditions.
         let sigma = 1.6 * f64::from(noise_density) * libm::sqrt(0.5 * fs);
         // Exact finite-N slope standard error: sigma / sqrt(S_tt), where
         // S_tt = N * (N² - 1) / (12 * fs²) for uniformly spaced samples.

@@ -118,9 +118,9 @@ misalignment, sensitivity, and offset correction to gyroscope or accelerometer r
 Both default to an identity model (no correction), so they can be wired into a sensor pipeline
 unconditionally even before calibration coefficients are known.
 
-`uf-ahrs` does not provide a method to determine these coefficients; they must come from an
-external calibration procedure (datasheet, factory calibration, or a calibration routine run once
-per device).
+`GyroBiasCalibration` can determine a stationary gyroscope offset. Other coefficients must come
+from an external calibration procedure (datasheet, factory calibration, or a calibration routine
+run once per device).
 
 ```rust
 use nalgebra::{Matrix3, Vector3};
@@ -149,9 +149,70 @@ fn main() {
 
 ```
 
+### Stationary gyroscope bias calibration
+
+Feed stationary gyroscope readings in **rad/s** to `GyroBiasCalibration::update(dt, gyro)`.
+Once the configured window duration and minimum sample count are reached without exceeding
+the standard deviation, drift rate, or peak-to-peak limits, calibration completes and
+returns `GyroBiasCalibrationStatus::Complete(bias)`. Rejected windows automatically restart
+collection on the next sample.
+
+```rust
+use core::time::Duration;
+use nalgebra::Vector3;
+use uf_ahrs::{GyroBiasCalibration, InertialCalibration};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let dt = Duration::from_millis(10);
+    let mut calibration = GyroBiasCalibration::default();
+
+    // Simulated stationary sensor readings in rad/s.
+    for _ in 0..125 {
+        let _status = calibration.update(dt, Vector3::new(0.02, -0.01, 0.03));
+    }
+
+    if let Some(offset) = calibration.bias() {
+        let gyro_calibration = InertialCalibration {
+            offset,
+            ..Default::default()
+        };
+        let corrected = gyro_calibration.calibrate(Vector3::new(0.02, -0.01, 0.03));
+        // Feed corrected readings into any AHRS filter.
+        assert!(corrected.norm() < 1e-6);
+    }
+    Ok(())
+}
+```
+
+Use `GyroBiasCalibration::new(params)` to customize thresholds or `GyroBiasCalibrationParams::from_noise_density`
+to estimate starting thresholds from a datasheet noise spectral density (in `rad/s/√Hz`):
+
+```rust
+use core::time::Duration;
+use uf_ahrs::GyroBiasCalibrationParams;
+
+// 0.0028 deg/s/√Hz is approximately 4.8869e-5 rad/s/√Hz.
+let params = GyroBiasCalibrationParams::from_noise_density(
+    Duration::from_millis(1250),
+    Duration::from_millis(10),
+    4.8869e-5,
+)?;
+# Ok::<(), uf_ahrs::GyroBiasCalibrationError>(())
+```
+
+Use `statistics()` to inspect the current or completed window (`minimum`, `maximum`, `mean`,
+`standard_deviation`, `drift_rate`, and `peak_to_peak()`), and `rejected_statistics()` to inspect
+the last rejected window. Call `reset()` to clear the state and recalibrate. See
+`examples/gyro_bias_calibration.rs` for a complete example.
+
 ## Benchmark Scores (BROAD)
 
 The results below are from evaluations on the **Berlin Robust Orientation Estimation Assessment Dataset (BROAD)**.
+
+The `examples/broad_score` runner calibrates startup gyroscope bias over the first 1.5 seconds of
+each recording and compares filter accuracy with and without startup bias correction (excluding the
+calibration window from scoring). Run `just eval` to reproduce.
+
 For context, BROAD contains **39 trials** with synchronized IMU and optical ground-truth orientation:
 **23 undisturbed trials** (rotation, translation, and combined motion at slow/fast speeds) and
 **16 disturbed trials** (e.g., tapping, vibration, stationary/attached magnets, office environment, and mixed conditions).
@@ -161,18 +222,30 @@ Reported metrics are dataset-averaged orientation errors in degrees:
 `AVG Total RMSE`, `AVG Heading RMSE`, and `AVG Inclination RMSE`.
 
 ```bash no_run
-Algorithm: Vqf
-  AVG Total RMSE:       2.0776 deg
-  AVG Heading RMSE:     1.9205 deg
-  AVG Inclination RMSE: 0.6963 deg
-Algorithm: Mahony
-  AVG Total RMSE:       7.4884 deg
-  AVG Heading RMSE:     6.2993 deg
-  AVG Inclination RMSE: 3.6971 deg
-Algorithm: Madgwick
+Algorithm: Mahony (startup calibration off, 39 recordings)
+  AVG Total RMSE:       7.4625 deg
+  AVG Heading RMSE:     6.2728 deg
+  AVG Inclination RMSE: 3.6924 deg
+Algorithm: Mahony (startup calibration on, 39 recordings)
+  AVG Total RMSE:       6.2489 deg
+  AVG Heading RMSE:     5.0200 deg
+  AVG Inclination RMSE: 3.4840 deg
+Algorithm: Madgwick (startup calibration off, 39 recordings)
   AVG Total RMSE:       5.0831 deg
   AVG Heading RMSE:     4.3588 deg
   AVG Inclination RMSE: 2.3404 deg
+Algorithm: Madgwick (startup calibration on, 39 recordings)
+  AVG Total RMSE:       3.6888 deg
+  AVG Heading RMSE:     2.8634 deg
+  AVG Inclination RMSE: 2.0598 deg
+Algorithm: Vqf (startup calibration off, 39 recordings)
+  AVG Total RMSE:       2.3003 deg
+  AVG Heading RMSE:     2.1525 deg
+  AVG Inclination RMSE: 0.6963 deg
+Algorithm: Vqf (startup calibration on, 39 recordings)
+  AVG Total RMSE:       2.3018 deg
+  AVG Heading RMSE:     2.1543 deg
+  AVG Inclination RMSE: 0.6962 deg
 ```
 
 ## Embedded Performance
