@@ -4,7 +4,13 @@
 #[macro_use]
 mod fmt;
 
+#[path = "../../common/telemetry.rs"]
+mod telemetry;
+
 use core::time::Duration;
+
+use crate::telemetry::Telemetry;
+use crate::telemetry::DOWN_TO_UP;
 
 use embassy_executor::Spawner;
 use embassy_stm32::bind_interrupts;
@@ -25,9 +31,10 @@ use embassy_time::Delay;
 use embassy_time::Timer;
 
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use nalgebra::UnitQuaternion;
 use nalgebra::Vector3;
 use uf_ahrs::Ahrs;
+use uf_ahrs::Axis;
+use uf_ahrs::AxisRemap;
 use uf_ahrs::GyroBiasCalibration;
 use uf_ahrs::GyroBiasCalibrationParams;
 use uf_ahrs::GyroBiasCalibrationRejectionReason;
@@ -55,42 +62,12 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
-fn log_sample(sample: &icm426xx::Sample) {
-    if let Some((ax, ay, az)) = sample.accel {
-        info!("accel m/s^2: x={} y={} z={}", ax, ay, az);
-    }
-
-    if let Some((gx, gy, gz)) = sample.gyro {
-        info!("gyro rad/s: x={} y={} z={}", gx, gy, gz);
-    }
-
-    let corrected_temp_c = corrected_fifo_temp_celsius(sample.temperature_celsius);
-    info!("temp C: {}", corrected_temp_c);
-}
-
-fn log_orientation(orientation: UnitQuaternion<f32>) {
-    let q = orientation.quaternion();
-    let (roll, pitch, yaw) = orientation.euler_angles();
-    info!(
-        "q w={} x={} y={} z={} rpy(rad)=({}, {}, {})",
-        q.w, q.i, q.j, q.k, roll, pitch, yaw
-    );
-}
-
 const SPI_FREQ_MHZ: u32 = 10;
 const IMU_ODR_HZ: f32 = 8000.0;
 const LOG_EVERY_N_SAMPLES: u32 = 200;
 // ICM-42688-P gyroscope rate noise spectral density: 0.0028 deg/s/√Hz ≈ 4.8869e-5 rad/s/√Hz.
 const ICM42688_GYRO_NSD_RAD_S_SQRT_HZ: f32 = 4.8869e-5;
 const CALIBRATION_DURATION: Duration = Duration::from_millis(1250);
-
-fn corrected_fifo_temp_celsius(driver_temp_celsius: f32) -> f32 {
-    // Temporary workaround for icm426xx 0.4.0:
-    // FIFO Packet-4 temperature is handled as 16-bit by the driver, but the
-    // conversion currently uses the FIFO 8-bit scale (2.07 LSB/C), inflating
-    // temperature delta-from-25C by ~64x. Undo that inflation in the demo.
-    ((driver_temp_celsius - 25.0) / 64.0) + 25.0
-}
 
 fn log_rejection(reason: GyroBiasCalibrationRejectionReason) {
     match reason {
@@ -135,7 +112,7 @@ fn step_gyro_calibration(
         }
         GyroBiasCalibrationStatus::Complete(offset) => {
             info!(
-                "gyro bias calibrated (rad/s): x={} y={} z={}",
+                "gyro bias calibrated (sensor frame, rad/s): x={} y={} z={}",
                 offset.x, offset.y, offset.z
             );
             Some(InertialCalibration {
@@ -149,31 +126,40 @@ fn step_gyro_calibration(
 fn process_sample(
     sample: &icm426xx::Sample,
     gyro_calibration: &InertialCalibration,
+    imu_to_board: AxisRemap,
     mahony: &mut Mahony,
     log_decimation: &mut u32,
-) -> bool {
+) {
     *log_decimation = log_decimation.wrapping_add(1);
     let should_log = log_decimation.is_multiple_of(LOG_EVERY_N_SAMPLES);
 
     if let (Some((gx, gy, gz)), Some((ax, ay, az))) = (sample.gyro, sample.accel) {
-        let gyro = gyro_calibration.calibrate(Vector3::new(gx, gy, gz));
-        let accel = Vector3::new(ax, ay, az);
+        let gyro = imu_to_board.remap(gyro_calibration.calibrate(Vector3::new(gx, gy, gz)));
+        let accel = imu_to_board.remap(Vector3::new(ax, ay, az));
         let orientation = mahony.update_imu(gyro, accel);
 
         if should_log {
-            log_orientation(orientation);
+            let telemetry = Telemetry {
+                orientation,
+                accel,
+                gyro,
+            };
+            #[cfg(feature = "defmt")]
+            info!("{}", defmt::Display2Format(&telemetry));
+            #[cfg(not(feature = "defmt"))]
+            let _ = telemetry;
         }
     }
-
-    if should_log {
-        log_sample(sample);
-    }
-
-    should_log
 }
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    // Betaflight CW90_DEG_FLIP gives forward-left-up. Flip Y and Z for forward-right-down.
+    let Some(imu_to_board) = AxisRemap::new(Axis::YPos, Axis::XNeg, Axis::ZPos) else {
+        error!("invalid primary IMU axis mapping");
+        return;
+    };
+
     let mut config = StmConfig::default();
     {
         use embassy_stm32::rcc::*;
@@ -218,7 +204,8 @@ async fn main(spawner: Spawner) {
     };
     let mut icm = icm.initialize(Delay, imu_config).await.unwrap();
     let sample_period = Duration::from_secs_f32(1.0 / IMU_ODR_HZ);
-    let mut mahony = Mahony::new(sample_period, MahonyParams::default());
+    let mut mahony =
+        Mahony::new_with_orientation(sample_period, MahonyParams::default(), DOWN_TO_UP);
 
     let calibration_params = GyroBiasCalibrationParams::from_noise_density(
         CALIBRATION_DURATION,
@@ -244,8 +231,13 @@ async fn main(spawner: Spawner) {
             match icm.read_sample().await {
                 Ok(Some((sample, has_more))) => {
                     if let Some(calibration) = &gyro_calibration {
-                        let _ =
-                            process_sample(&sample, calibration, &mut mahony, &mut log_decimation);
+                        process_sample(
+                            &sample,
+                            calibration,
+                            imu_to_board,
+                            &mut mahony,
+                            &mut log_decimation,
+                        );
                     } else {
                         gyro_calibration =
                             step_gyro_calibration(&sample, sample_period, &mut calibrator);

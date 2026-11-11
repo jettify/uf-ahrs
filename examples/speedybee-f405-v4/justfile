@@ -1,0 +1,13 @@
+firmware := "target/thumbv7em-none-eabihf/release/speedybee-f405-v4"
+
+default:
+  just --list
+
+build:
+  cargo build --release
+
+bin: build
+  arm-none-eabi-objcopy -O binary {{firmware}} {{firmware}}.bin
+
+dfu: bin
+  dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D {{firmware}}.bin
