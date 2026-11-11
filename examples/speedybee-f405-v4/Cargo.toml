@@ -1,0 +1,28 @@
+[package]
+name = "speedybee-f405-v4"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cortex-m = { version = "0.7.6", features = ["critical-section-single-core", "inline-asm"] }
+cortex-m-rt = "0.7.7"
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
+embassy-futures = "0.1.2"
+embassy-time = "0.5.1"
+embassy-usb = "0.6.0"
+embassy-usb-logger = "0.6.0"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
+icm426xx = { version = "0.4.0", features = ["async"] }
+log = "0.4"
+nalgebra = { version = "0.35", default-features = false, features = ["libm"] }
+panic-halt = "1.0.0"
+speedybee-f405-v4-bsp = { path = "../../../uf-bsp/speedybee-f405-v4-bsp" }
+static_cell = "2.1.1"
+uf-ahrs = { path = "../.." }
+
+[profile.release]
+codegen-units = 1
+debug = 2
+lto = "fat"
+opt-level = "s"
