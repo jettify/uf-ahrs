@@ -1,7 +1,9 @@
 use core::time::Duration;
 
+use crate::gyro_integration::integrate_gyro;
 use crate::traits::Ahrs;
 use crate::traits::AhrsWithDt;
+
 use nalgebra::Matrix4;
 use nalgebra::Matrix6;
 use nalgebra::Quaternion;
@@ -27,6 +29,10 @@ impl Default for MadgwickParams {
 }
 
 /// Madgwick gradient-descent AHRS filter.
+///
+/// Uses a quaternion exponential for gyroscope propagation. The gradient
+/// correction is evaluated at the start of the sample and applied with a
+/// first-order step, followed by quaternion normalization.
 #[derive(Debug)]
 pub struct Madgwick {
     dt: f32,
@@ -169,9 +175,9 @@ impl Madgwick {
         let Some(step) = (j_t * f).try_normalize(f32::EPSILON) else {
             return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
-        let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * half
-            - Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
+        let correction = Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
+        let predicted = integrate_gyro(self.quaternion, gyroscope, dt);
+        self.quaternion = UnitQuaternion::from_quaternion(predicted.into_inner() - correction * dt);
         self.quaternion
     }
 
@@ -217,9 +223,9 @@ impl Madgwick {
         let Some(step) = (j_t * f).try_normalize(f32::EPSILON) else {
             return self.update_gyro_with_dt_seconds(gyroscope, dt);
         };
-        let q_dot = (q * Quaternion::from_parts(0.0, gyroscope)) * half
-            - Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
+        let correction = Quaternion::new(step.x, step.y, step.z, step.w) * self.params.beta;
+        let predicted = integrate_gyro(self.quaternion, gyroscope, dt);
+        self.quaternion = UnitQuaternion::from_quaternion(predicted.into_inner() - correction * dt);
         self.quaternion
     }
 
@@ -228,10 +234,7 @@ impl Madgwick {
         gyroscope: Vector3<f32>,
         dt: f32,
     ) -> UnitQuaternion<f32> {
-        let q = self.quaternion.as_ref();
-        let half: f32 = 0.5;
-        let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * half;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
+        self.quaternion = integrate_gyro(self.quaternion, gyroscope, dt);
         self.quaternion
     }
 }

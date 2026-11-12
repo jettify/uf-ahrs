@@ -1,7 +1,9 @@
 use core::time::Duration;
 
+use crate::gyro_integration::integrate_gyro;
 use crate::traits::Ahrs;
 use crate::traits::AhrsWithDt;
+
 use nalgebra::Quaternion;
 use nalgebra::UnitQuaternion;
 use nalgebra::Vector2;
@@ -26,6 +28,9 @@ impl Default for MahonyParams {
 }
 
 /// Mahony nonlinear complementary filter for orientation estimation.
+///
+/// Integrates the feedback-corrected angular velocity using a quaternion
+/// exponential, with angular velocity held constant during each sample interval.
 #[derive(Debug)]
 pub struct Mahony {
     dt: f32,
@@ -87,9 +92,7 @@ impl Mahony {
         gyroscope: Vector3<f32>,
         dt: f32,
     ) -> UnitQuaternion<f32> {
-        let q = self.quaternion.as_ref();
-        let q_dot = q * Quaternion::from_parts(0.0, gyroscope) * 0.5;
-        self.quaternion = UnitQuaternion::from_quaternion(q + q_dot * dt);
+        self.quaternion = integrate_gyro(self.quaternion, gyroscope, dt);
         self.quaternion
     }
 

@@ -137,6 +137,107 @@ fn test_gyro_yaw_estimation(#[case] mut ahrs: AhrsBox) {
 }
 
 #[rstest]
+#[case::mahony(mahony_gyro())]
+#[case::madgwick(madgwick_gyro())]
+fn test_gyro_large_step_matches_body_frame_rotation(#[case] mut ahrs: AhrsBox) {
+    let initial = UnitQuaternion::from_euler_angles(0.6, -0.4, 0.8);
+    let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, -2.0, 3.0));
+    ahrs.set_orientation(initial);
+    // A 1.2 radian step exposes the angle error of normalized Euler integration.
+    let actual = ahrs.update_gyro(axis.into_inner() * 12.0);
+    let expected = initial * UnitQuaternion::from_axis_angle(&axis, 1.2);
+    assert!(
+        actual.angle_to(&expected) < 1e-6,
+        "incorrect body-frame rotation"
+    );
+}
+
+#[rstest]
+#[case::mahony(mahony_gyro())]
+#[case::madgwick(madgwick_gyro())]
+fn test_gyro_repeated_rotations_preserve_accuracy_and_norm(#[case] mut ahrs: AhrsBox) {
+    let axis = nalgebra::Unit::new_normalize(Vector3::new(-2.0, 1.0, 3.0));
+    for _ in 0..10_000 {
+        ahrs.update_gyro(axis.into_inner() * 0.7);
+    }
+    let expected = UnitQuaternion::from_axis_angle(&axis, 700.0);
+    assert!(
+        ahrs.orientation().angle_to(&expected) < 2e-4,
+        "accumulated rotation error"
+    );
+    assert_abs_diff_eq!(ahrs.orientation().quaternion().norm(), 1.0, epsilon = 2e-7);
+}
+
+#[rstest]
+#[case::mahony(Box::new(Mahony::default()) as Box<dyn AhrsWithDt>)]
+#[case::madgwick(Box::new(Madgwick::default()) as Box<dyn AhrsWithDt>)]
+fn test_gyro_zero_and_tiny_steps(#[case] mut ahrs: Box<dyn AhrsWithDt>) {
+    let initial = UnitQuaternion::from_euler_angles(0.3, -0.2, 0.5);
+    ahrs.set_orientation(initial);
+    ahrs.update_gyro_with_dt(Duration::ZERO, Vector3::new(10.0, -20.0, 30.0));
+    assert_relative_eq!(ahrs.orientation(), initial, epsilon = 1e-7);
+    ahrs.update_gyro_with_dt(Duration::from_secs(1), Vector3::zeros());
+    assert!(
+        ahrs.orientation().angle_to(&initial) < 1e-7,
+        "zero gyro changed orientation"
+    );
+
+    // Test near zero, including a rate whose squared norm underflows in f32.
+    for rate in [1e-7, 1e-25] {
+        ahrs.set_orientation(UnitQuaternion::identity());
+        let actual = ahrs.update_gyro_with_dt(Duration::from_secs(1), Vector3::x() * rate);
+        assert_relative_eq!(
+            actual.quaternion().i,
+            rate * 0.5,
+            max_relative = 1e-6,
+            epsilon = 0.0
+        );
+        assert_abs_diff_eq!(actual.quaternion().w, 1.0, epsilon = 1e-7);
+    }
+}
+
+#[rstest]
+#[case::mahony(Box::new(Mahony::new(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 })) as Box<dyn AhrsWithDt>)]
+#[case::madgwick(Box::new(Madgwick::new(IMU_PERIOD, MadgwickParams { beta: 0.0 })) as Box<dyn AhrsWithDt>)]
+fn test_zero_feedback_all_update_paths_match_exponential(#[case] mut ahrs: Box<dyn AhrsWithDt>) {
+    let initial = UnitQuaternion::from_euler_angles(0.3, -0.5, 0.7);
+    let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, -3.0));
+    let gyro = axis.into_inner() * 8.0;
+    let accel = Vector3::new(0.2, -0.3, 1.0);
+    let mag = Vector3::new(0.5, 0.1, -0.2);
+    let dt = Duration::from_millis(200);
+    let expected = initial * UnitQuaternion::from_axis_angle(&axis, 1.6);
+    for mode in 0..6 {
+        ahrs.set_orientation(initial);
+        let actual = match mode {
+            0 => ahrs.update_gyro_with_dt(dt, gyro),
+            1 => ahrs.update_imu_with_dt(dt, gyro, accel),
+            2 => ahrs.update_with_dt(dt, gyro, accel, mag),
+            3 => ahrs.update_imu_with_dt(dt, gyro, Vector3::zeros()),
+            4 => ahrs.update_with_dt(dt, gyro, Vector3::zeros(), mag),
+            _ => ahrs.update_with_dt(dt, gyro, accel, Vector3::zeros()),
+        };
+        assert!(
+            actual.angle_to(&expected) < 1e-6,
+            "update path {mode} differs from exponential"
+        );
+    }
+}
+
+#[test]
+fn test_mahony_exponential_uses_bias_corrected_rate() {
+    let mut ahrs = Mahony::new(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 });
+    ahrs.bias = Vector3::new(1.0, -2.0, 0.5);
+    let gyro = ahrs.bias + Vector3::z() * 6.0;
+    let actual = ahrs.update_imu_with_dt(Duration::from_millis(200), gyro, Vector3::z());
+    let expected = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), 1.2);
+    assert!(
+        actual.angle_to(&expected) < 1e-6,
+        "bias was not removed before integration"
+    );
+}
+
+#[rstest]
 #[case::mahony(mahony_imu())]
 #[case::madgwick(madgwick_imu())]
 #[case::vqf(vqf_imu())]
