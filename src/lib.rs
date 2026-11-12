@@ -7,6 +7,7 @@
 
 mod calibration;
 mod gyro_bias_calibration;
+mod gyro_integration;
 mod madgwick;
 mod mahony;
 pub(crate) mod mean_init_lfp;
