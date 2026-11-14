@@ -5,6 +5,8 @@
 )]
 #![doc = include_str!("../README.md")]
 
+mod accel_low_pass;
+mod accel_prefilter;
 mod calibration;
 mod gyro_bias_calibration;
 mod gyro_integration;
