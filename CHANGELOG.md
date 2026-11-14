@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/jettify/uf-ahrs/compare/v0.2.2...v0.2.3) - 2026-11-14
+
+### Added
+
+- Quaternion integration instead of Euler.
+- Slope and magnitude aware calibration.
+- External heading correction.
+- Initial gyro calibration.
+
+### Other
+
+- New speedybee demo and updated tbs lucid.
+- Bump dependenncies.
+- Update readme.
+- Update gyro bias estimation explanation.
+- Reformat with nightly formatter for better diff.
+- Upgrade dependencies.
+
 ## [0.2.2](https://github.com/jettify/uf-ahrs/compare/v0.2.1...v0.2.2) - 2026-10-01
 
 ### Added
