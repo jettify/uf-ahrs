@@ -6,14 +6,14 @@ use core::time::Duration;
 use crate::telemetry::{DOWN_TO_UP, Telemetry};
 
 use embassy_executor::Spawner;
-use embassy_time::Delay;
-use embassy_time::Timer;
+use embassy_futures::yield_now;
+use embassy_time::{Delay, Timer, with_timeout};
+use embedded_hal_async::spi::SpiDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use nalgebra::Vector3;
 use panic_halt as _;
 use speedybee_f405_v4_bsp as bsp;
 
-use bsp::hal::exti;
 use bsp::hal::gpio::{Level, Output, Pull, Speed};
 use bsp::hal::{interrupt, spi};
 use uf_ahrs::{
@@ -35,6 +35,11 @@ const IMU_ODR_HZ: u64 = 1_000;
 const SAMPLE_PERIOD: Duration = Duration::from_micros(1_000_000 / IMU_ODR_HZ);
 const LOG_HZ: u64 = 2;
 const LOG_EVERY_N_SAMPLES: u64 = IMU_ODR_HZ / LOG_HZ;
+// The driver uses 20-byte high-resolution FIFO packets and a one-packet watermark.
+const FIFO_PACKET_BYTES: u16 = core::mem::size_of::<icm426xx::fifo::FifoPacket4>() as u16;
+const MAX_DRAIN_SAMPLES: usize = 32;
+const FIFO_POLL_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_millis(10);
+const ERROR_BACKOFF: embassy_time::Duration = embassy_time::Duration::from_millis(1);
 const CALIBRATION_DURATION: Duration = Duration::from_millis(1_250);
 // ICM-42688-P gyro rate noise spectral density: 0.0028 deg/s/√Hz.
 const GYRO_NOISE_DENSITY_RAD_S_SQRT_HZ: f32 = 4.8869e-5;
@@ -64,12 +69,12 @@ async fn main(spawner: Spawner) {
     };
 
     let imu_config = icm426xx::Config {
-        int1_mode: icm426xx::InterruptMode::Pulsed,
+        int1_mode: icm426xx::InterruptMode::Latched,
         int1_polarity: icm426xx::InterruptPolarity::ActiveHigh,
         rate: icm426xx::OutputDataRate::Hz1000,
         timestamps_are_absolute: false,
     };
-    let Ok(mut icm) = icm426xx::ICM42688::new(spi_device)
+    let Ok(icm) = icm426xx::ICM42688::new(spi_device)
         .initialize(Delay, imu_config)
         .await
     else {
@@ -77,19 +82,15 @@ async fn main(spawner: Spawner) {
         return;
     };
 
-    let Ok(mut drdy) = bsp::parts::setup_primary_imu_drdy(
+    let drdy = bsp::parts::setup_primary_imu_drdy(
         imu.int,
         imu.int_exti,
         Irqs,
         Pull::None,
-        exti::TriggerEdge::Rising,
         interrupt::Priority::P6,
-    ) else {
-        log::error!("IMU data-ready latch already claimed");
-        return;
-    };
+    );
 
-    let Ok(mut calibrator) = GyroBiasCalibrationParams::from_noise_density(
+    let Ok(calibrator) = GyroBiasCalibrationParams::from_noise_density(
         CALIBRATION_DURATION,
         SAMPLE_PERIOD,
         GYRO_NOISE_DENSITY_RAD_S_SQRT_HZ,
@@ -98,101 +99,162 @@ async fn main(spawner: Spawner) {
         log::error!("invalid gyro calibration parameters");
         return;
     };
-    let mut gyro_calibration: Option<InertialCalibration> = None;
+
+    let mut imu = ImuReader::new(icm, drdy);
+    let gyro_calibration = calibrate_gyro(&mut imu, calibrator).await;
+
     let mut mahony =
         Mahony::new_with_orientation(SAMPLE_PERIOD, MahonyParams::default(), DOWN_TO_UP);
     let mut samples_since_log = 0;
-    log::info!("keep the board still for gyro bias calibration");
 
     loop {
-        let _ = drdy.wait().await;
+        let Ok(sample) = imu.next_sample().await else {
+            continue;
+        };
+        let Some((gx, gy, gz)) = sample.gyro else {
+            continue;
+        };
+        let gyro = imu_to_board.remap(gyro_calibration.calibrate(Vector3::new(gx, gy, gz)));
+        let Some((ax, ay, az)) = sample.accel else {
+            // Preserve this sample's rotation when no gravity correction is available.
+            let _orientation = mahony.update_gyro(gyro);
+            continue;
+        };
 
-        loop {
-            match icm.read_sample().await {
-                Ok(Some((sample, has_more))) => {
-                    if let Some((gx, gy, gz)) = sample.gyro {
-                        let raw_gyro = Vector3::new(gx, gy, gz);
-                        match (&gyro_calibration, sample.accel) {
-                            (Some(calibration), Some((ax, ay, az))) => {
-                                let gyro = imu_to_board.remap(calibration.calibrate(raw_gyro));
-                                let accel = imu_to_board.remap(Vector3::new(ax, ay, az));
-                                let orientation = mahony.update_imu(gyro, accel);
+        let accel = imu_to_board.remap(Vector3::new(ax, ay, az));
+        let orientation = mahony.update_imu(gyro, accel);
 
-                                samples_since_log += 1;
-                                if samples_since_log == LOG_EVERY_N_SAMPLES {
-                                    samples_since_log = 0;
-                                    led.toggle();
-                                    let telemetry = Telemetry {
-                                        orientation,
-                                        accel,
-                                        gyro,
-                                    };
-                                    log::info!("{telemetry}");
-                                }
-                            }
-                            (None, _) => {
-                                gyro_calibration = step_gyro_calibration(&mut calibrator, raw_gyro);
-                            }
-                            (Some(_), None) => {}
-                        }
-                    }
+        samples_since_log += 1;
+        if samples_since_log >= LOG_EVERY_N_SAMPLES {
+            samples_since_log = 0;
+            led.toggle();
+            let telemetry = Telemetry {
+                orientation,
+                accel,
+                gyro,
+            };
+            log::info!("{telemetry}");
+        }
+    }
+}
 
-                    if !has_more {
-                        break;
-                    }
-                }
-                Ok(None) => break,
-                Err(icm426xx::Error::FifoOverflow) => {
-                    log::warn!("IMU FIFO overflow; resetting FIFO");
-                    if gyro_calibration.is_none() {
-                        calibrator.reset();
-                    }
-                    if icm.reset_fifo().await.is_err() {
-                        log::error!("IMU FIFO reset failed");
-                    }
-                    break;
-                }
-                Err(icm426xx::Error::Bus(_)) => {
-                    log::error!("IMU bus read failed");
-                    if gyro_calibration.is_none() {
-                        calibrator.reset();
-                    }
-                    break;
-                }
-                Err(icm426xx::Error::WhoAmIMismatch(whoami)) => {
-                    log::error!("unexpected IMU identity: {whoami:#04x}");
-                    return;
-                }
+async fn calibrate_gyro<SPI: SpiDevice>(
+    imu: &mut ImuReader<'_, SPI>,
+    mut calibrator: GyroBiasCalibration,
+) -> InertialCalibration {
+    log::info!("keep the board still for gyro bias calibration");
+    loop {
+        let Ok(sample) = imu.next_sample().await else {
+            calibrator.reset();
+            continue;
+        };
+        let Some((gx, gy, gz)) = sample.gyro else {
+            continue;
+        };
+        match calibrator.update(SAMPLE_PERIOD, Vector3::new(gx, gy, gz)) {
+            GyroBiasCalibrationStatus::Collecting => {}
+            GyroBiasCalibrationStatus::Rejected(reason) => {
+                log::warn!("gyro calibration rejected ({reason:?}); retrying");
+            }
+            GyroBiasCalibrationStatus::InvalidSample => {
+                log::warn!("invalid gyro calibration sample; retrying");
+            }
+            GyroBiasCalibrationStatus::Complete(offset) => {
+                log::info!(
+                    "gyro bias calibrated (sensor frame, rad/s): x={} y={} z={}",
+                    offset.x,
+                    offset.y,
+                    offset.z
+                );
+                return InertialCalibration {
+                    offset,
+                    ..Default::default()
+                };
             }
         }
     }
 }
 
-fn step_gyro_calibration(
-    calibrator: &mut GyroBiasCalibration,
-    gyro: Vector3<f32>,
-) -> Option<InertialCalibration> {
-    match calibrator.update(SAMPLE_PERIOD, gyro) {
-        GyroBiasCalibrationStatus::Collecting => None,
-        GyroBiasCalibrationStatus::Rejected(reason) => {
-            log::warn!("gyro calibration rejected ({reason:?}); retrying");
-            None
+struct Discontinuity;
+
+struct ImuReader<'d, SPI> {
+    icm: icm426xx::ICM42688<SPI, icm426xx::Ready>,
+    drdy: bsp::parts::ImuDrdyInput<'d>,
+    has_more: bool,
+    reads_since_yield: usize,
+}
+
+impl<'d, SPI: SpiDevice> ImuReader<'d, SPI> {
+    fn new(
+        icm: icm426xx::ICM42688<SPI, icm426xx::Ready>,
+        drdy: bsp::parts::ImuDrdyInput<'d>,
+    ) -> Self {
+        Self {
+            icm,
+            drdy,
+            // Drain startup data before waiting for the first notification.
+            has_more: true,
+            reads_since_yield: 0,
         }
-        GyroBiasCalibrationStatus::InvalidSample => {
-            log::warn!("invalid gyro calibration sample; retrying");
-            None
+    }
+
+    async fn next_sample(&mut self) -> Result<icm426xx::Sample, Discontinuity> {
+        loop {
+            if !self.has_more {
+                // has_more describes occupancy before the previous packet was consumed;
+                // recheck FIFO count to catch samples that arrived during that read.
+                match self.icm.read_fifo_count().await {
+                    Ok(bytes) if bytes < FIFO_PACKET_BYTES => {
+                        self.reads_since_yield = 0;
+                        // Already-high INT1 wakes immediately; timeout covers missed notifications.
+                        let _wake =
+                            with_timeout(FIFO_POLL_TIMEOUT, self.drdy.wait_for_high()).await;
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        self.recover_from_error(icm426xx::Error::Bus(err)).await;
+                        return Err(Discontinuity);
+                    }
+                }
+            }
+
+            if self.reads_since_yield >= MAX_DRAIN_SAMPLES {
+                self.reads_since_yield = 0;
+                yield_now().await;
+            }
+
+            self.reads_since_yield += 1;
+            match self.icm.read_sample().await {
+                Ok(Some((sample, has_more))) => {
+                    self.has_more = has_more;
+                    return Ok(sample);
+                }
+                Ok(None) => {
+                    self.has_more = false;
+                }
+                Err(err) => {
+                    self.recover_from_error(err).await;
+                    return Err(Discontinuity);
+                }
+            }
         }
-        GyroBiasCalibrationStatus::Complete(offset) => {
-            log::info!(
-                "gyro bias calibrated (sensor frame, rad/s): x={} y={} z={}",
-                offset.x,
-                offset.y,
-                offset.z
-            );
-            Some(InertialCalibration {
-                offset,
-                ..Default::default()
-            })
+    }
+
+    /// Restore packet alignment before allowing any further sample reads.
+    async fn recover_from_error(&mut self, err: icm426xx::Error<SPI::Error>) {
+        match err {
+            icm426xx::Error::FifoOverflow => log::warn!("IMU FIFO overflow; resetting FIFO"),
+            icm426xx::Error::Bus(_) => log::error!("IMU bus read failed; resetting FIFO"),
+            icm426xx::Error::WhoAmIMismatch(whoami) => {
+                log::error!("unexpected IMU identity: {whoami:#04x}");
+            }
+        }
+        self.has_more = false;
+        self.reads_since_yield = 0;
+        Timer::after(ERROR_BACKOFF).await;
+        while self.icm.reset_fifo().await.is_err() {
+            log::warn!("IMU FIFO reset failed; retrying");
+            Timer::after(ERROR_BACKOFF).await;
         }
     }
 }

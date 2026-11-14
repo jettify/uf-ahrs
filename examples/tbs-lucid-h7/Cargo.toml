@@ -4,14 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-stm32 = { version = "0.6.0", features = [
-  "stm32h743vi",
-  "unstable-pac",
-  "memory-x",
-  "time-driver-tim4",
-  "exti",
-  "chrono",
-] }
 embassy-executor = { version = "0.10.0", features = [
   "platform-cortex-m",
   "executor-thread",
@@ -20,8 +12,10 @@ embassy-time = { version = "0.5.0", features = [
   "defmt",
   "defmt-timestamp-uptime",
 ] }
-embassy-sync = "0.8.0"
-embassy-embedded-hal = "0.6.0"
+embassy-futures = "0.1.2"
+embedded-hal-async = "1.0.0"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
+tbs-lucid-h7-bsp = "0.1.0"
 cortex-m = { version = "0.7.9", features = [
   "inline-asm",
   "critical-section-single-core",
@@ -51,5 +45,4 @@ debug = [
   "defmt-rtt",
   "panic-probe",
   "embassy-executor/defmt",
-  "embassy-stm32/defmt",
 ]
