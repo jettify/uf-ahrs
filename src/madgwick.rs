@@ -47,7 +47,7 @@ impl Default for MadgwickParams {
 #[derive(Debug)]
 pub struct Madgwick {
     sample_period: Duration,
-    prefilter: Option<AccelPrefilter>,
+    accel_prefilter: Option<AccelPrefilter>,
     params: MadgwickParams,
     quaternion: UnitQuaternion<f32>,
 }
@@ -83,7 +83,7 @@ impl Madgwick {
     ) -> Self {
         Madgwick {
             sample_period,
-            prefilter: AccelPrefilter::new(params.tau_accelerometer),
+            accel_prefilter: AccelPrefilter::new(params.tau_accelerometer),
             params,
             quaternion: orientation,
         }
@@ -104,15 +104,13 @@ impl Madgwick {
     /// accelerometer is dominated by non-gravitational acceleration.
     pub fn set_params(&mut self, params: MadgwickParams) {
         if params.tau_accelerometer != self.params.tau_accelerometer {
-            self.prefilter =
-                AccelPrefilter::reconfigure(self.prefilter.take(), params.tau_accelerometer);
+            self.accel_prefilter =
+                AccelPrefilter::reconfigure(self.accel_prefilter.take(), params.tau_accelerometer);
         }
         self.params = params;
     }
-}
 
-impl Madgwick {
-    fn update_with_dt_seconds(
+    fn update_marg_raw(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
@@ -213,7 +211,7 @@ impl Madgwick {
         self.quaternion
     }
 
-    fn update_imu_with_dt_seconds(
+    fn update_imu_raw(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
@@ -272,18 +270,12 @@ impl Madgwick {
         self.quaternion
     }
 
-    fn update_gyro_with_dt_seconds(
-        &mut self,
-        gyroscope: Vector3<f32>,
-        dt: f32,
-    ) -> UnitQuaternion<f32> {
+    fn update_gyro_raw(&mut self, gyroscope: Vector3<f32>, dt: f32) -> UnitQuaternion<f32> {
         self.quaternion = integrate_gyro(self.quaternion, gyroscope, dt);
         self.quaternion
     }
-}
 
-impl Madgwick {
-    fn step(
+    fn update_internal(
         &mut self,
         dt: Duration,
         gyro: Vector3<f32>,
@@ -291,12 +283,12 @@ impl Madgwick {
         mag: Option<Vector3<f32>>,
     ) -> UnitQuaternion<f32> {
         let seconds = dt.as_secs_f32();
-        let Some(prefilter) = self.prefilter.as_mut() else {
+        let Some(prefilter) = self.accel_prefilter.as_mut() else {
             // True bypass: retain raw input, normalization and legacy update order.
             return match (accel, mag) {
-                (Some(accel), Some(mag)) => self.update_with_dt_seconds(gyro, accel, mag, seconds),
-                (Some(accel), None) => self.update_imu_with_dt_seconds(gyro, accel, seconds),
-                (None, _) => self.update_gyro_with_dt_seconds(gyro, seconds),
+                (Some(accel), Some(mag)) => self.update_marg_raw(gyro, accel, mag, seconds),
+                (Some(accel), None) => self.update_imu_raw(gyro, accel, seconds),
+                (None, _) => self.update_gyro_raw(gyro, seconds),
             };
         };
         if dt.is_zero() || !is_finite_vector(gyro) {
@@ -325,7 +317,7 @@ impl Madgwick {
 impl Ahrs for Madgwick {
     fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
         self.quaternion = quat;
-        self.prefilter = AccelPrefilter::new(self.params.tau_accelerometer);
+        self.accel_prefilter = AccelPrefilter::new(self.params.tau_accelerometer);
     }
 
     fn orientation(&self) -> UnitQuaternion<f32> {
@@ -338,7 +330,7 @@ impl Ahrs for Madgwick {
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(
+        self.update_internal(
             self.sample_period,
             gyroscope,
             Some(accelerometer),
@@ -351,11 +343,11 @@ impl Ahrs for Madgwick {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(self.sample_period, gyroscope, Some(accelerometer), None)
+        self.update_internal(self.sample_period, gyroscope, Some(accelerometer), None)
     }
 
     fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
-        self.step(self.sample_period, gyroscope, None, None)
+        self.update_internal(self.sample_period, gyroscope, None, None)
     }
 }
 
@@ -367,7 +359,7 @@ impl AhrsWithDt for Madgwick {
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, Some(accelerometer), Some(magnetometer))
+        self.update_internal(dt, gyroscope, Some(accelerometer), Some(magnetometer))
     }
 
     fn update_imu_with_dt(
@@ -376,7 +368,7 @@ impl AhrsWithDt for Madgwick {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, Some(accelerometer), None)
+        self.update_internal(dt, gyroscope, Some(accelerometer), None)
     }
 
     fn update_gyro_with_dt(
@@ -384,7 +376,7 @@ impl AhrsWithDt for Madgwick {
         dt: Duration,
         gyroscope: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, None, None)
+        self.update_internal(dt, gyroscope, None, None)
     }
 }
 
@@ -407,11 +399,11 @@ mod tests {
         );
         filter.update_imu(Vector3::new(0.1, 0.2, 0.3), Vector3::z());
         let orientation = filter.orientation();
-        let history = std::format!("{:?}", filter.prefilter);
+        let history = std::format!("{:?}", filter.accel_prefilter);
         let gyro = Vector3::repeat(1e25);
         assert!((gyro * dt.as_secs_f32()).iter().all(|v| v.is_finite()));
         assert_eq!(filter.update(gyro, Vector3::x(), Vector3::z()), orientation);
-        assert_eq!(std::format!("{:?}", filter.prefilter), history);
+        assert_eq!(std::format!("{:?}", filter.accel_prefilter), history);
     }
 
     #[test]

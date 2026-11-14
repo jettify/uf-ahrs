@@ -85,7 +85,12 @@ impl AccelPrefilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Ahrs, AhrsWithDt, Madgwick, MadgwickParams, Mahony, MahonyParams};
+    use crate::Ahrs;
+    use crate::AhrsWithDt;
+    use crate::Madgwick;
+    use crate::MadgwickParams;
+    use crate::Mahony;
+    use crate::MahonyParams;
 
     #[test]
     fn test_raw_mean_and_dropouts_use_full_elapsed_time() {

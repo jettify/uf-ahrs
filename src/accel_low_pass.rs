@@ -14,11 +14,11 @@ pub(crate) struct AccelLowPass {
     // tau * derivative, so both states have acceleration units.
     scaled_derivative: Vector3<f32>,
     warmup_elapsed: Duration,
-    coefficients: Option<StepCoefficients>,
+    coefficients: Option<ButterworthCoefficients>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct StepCoefficients {
+struct ButterworthCoefficients {
     dt_over_tau: f32,
     decay: f32,
     sin: f32,
@@ -35,12 +35,12 @@ impl AccelLowPass {
         (self.output, self.scaled_derivative, self.warmup_elapsed)
     }
 
-    fn step_coefficients(&self, dt_over_tau: f32) -> StepCoefficients {
+    fn cached_coefficients(&self, dt_over_tau: f32) -> ButterworthCoefficients {
         // Exact equality is intentional: memoize the same scalar functions
         // without rounding the actual sample interval.
         match self.coefficients {
             Some(cached) if cached.dt_over_tau == dt_over_tau => cached,
-            _ => StepCoefficients {
+            _ => ButterworthCoefficients {
                 dt_over_tau,
                 decay: libm::expf(-dt_over_tau),
                 sin: libm::sinf(dt_over_tau),
@@ -49,19 +49,19 @@ impl AccelLowPass {
         }
     }
 
-    fn step_butterworth(
+    fn propagate_butterworth(
         &self,
         previous_output: Vector3<f32>,
         input: Vector3<f32>,
         dt_over_tau: f32,
-    ) -> (Vector3<f32>, Vector3<f32>, Option<StepCoefficients>) {
+    ) -> (Vector3<f32>, Vector3<f32>, Option<ButterworthCoefficients>) {
         if dt_over_tau > 50.0 {
             // The transient has decayed below f32 precision after a gap.
             return (input, Vector3::zeros(), self.coefficients);
         }
 
-        let coeffs = self.step_coefficients(dt_over_tau);
-        let StepCoefficients {
+        let coeffs = self.cached_coefficients(dt_over_tau);
+        let ButterworthCoefficients {
             decay, sin, cos, ..
         } = coeffs;
         let offset = previous_output - input;
@@ -91,7 +91,7 @@ impl AccelLowPass {
             } else {
                 let dt_over_tau = dt.as_secs_f32() / tau.as_secs_f32();
                 let (output, scaled_derivative, coefficients) =
-                    self.step_butterworth(previous_output, input, dt_over_tau);
+                    self.propagate_butterworth(previous_output, input, dt_over_tau);
                 (output, scaled_derivative, self.warmup_elapsed, coefficients)
             }
         } else {

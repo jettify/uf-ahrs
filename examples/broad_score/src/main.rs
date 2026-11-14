@@ -1,10 +1,11 @@
 use core::time::Duration;
-use glob::glob;
-use polars::prelude::*;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::path::PathBuf;
+
+use glob::glob;
+use itertools::izip;
+use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector3};
+use polars::prelude::*;
 use uf_ahrs::Ahrs;
 use uf_ahrs::InertialCalibration;
 use uf_ahrs::{GyroBiasCalibration, GyroBiasCalibrationParams, GyroBiasCalibrationStatus};
@@ -12,10 +13,7 @@ use uf_ahrs::{Madgwick, MadgwickParams};
 use uf_ahrs::{Mahony, MahonyParams};
 use uf_ahrs::{Vqf, VqfParams};
 
-use itertools::izip;
-use nalgebra::{Matrix3, Quaternion, UnitQuaternion, Vector3};
-
-pub fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
+fn quat_from_acc_mag(acc: &Vector3<f32>, mag: &Vector3<f32>) -> UnitQuaternion<f32> {
     let z = acc;
     let x_temp = z.cross(&-mag);
     let x = x_temp.cross(z);
@@ -96,7 +94,11 @@ fn calibrate_startup(
                 ));
             }
             GyroBiasCalibrationStatus::Rejected(reason) => {
-                return Err(format!("startup gyro calibration rejected: {reason:?}; statistics: {:?}", calibrator.rejected_statistics()).into());
+                return Err(format!(
+                    "startup gyro calibration rejected: {reason:?}; statistics: {:?}",
+                    calibrator.rejected_statistics()
+                )
+                .into());
             }
             GyroBiasCalibrationStatus::InvalidSample => {
                 return Err("startup gyro calibration encountered invalid data".into());
@@ -321,100 +323,173 @@ fn analyze_results(df: &DataFrame) -> Result<RmseScore, Box<dyn Error>> {
 
 #[derive(Debug, Copy, Clone)]
 enum Algorithm {
-    Madgwick,
-    Mahony,
+    Madgwick(MadgwickParams),
+    Mahony(MahonyParams),
     Vqf,
+}
+
+// Selected BROAD settings retained from tuning across both calibration modes.
+fn filtered_mahony() -> MahonyParams {
+    MahonyParams {
+        kp: 0.74,
+        ki: 0.0012,
+        tau_accelerometer: Duration::from_millis(750),
+    }
+}
+
+fn filtered_madgwick() -> MadgwickParams {
+    MadgwickParams {
+        beta: 0.02,
+        tau_accelerometer: Duration::from_secs(2),
+    }
 }
 
 fn make_ahrs(algorithm: Algorithm, sample_period: Duration) -> Box<dyn Ahrs> {
     match algorithm {
-        Algorithm::Mahony => Box::new(Mahony::new(sample_period, MahonyParams::default())),
-        Algorithm::Madgwick => Box::new(Madgwick::new(sample_period, MadgwickParams::default())),
-        Algorithm::Vqf => {
-            let params = VqfParams::default();
-            Box::new(Vqf::new(sample_period, params))
-        }
+        Algorithm::Mahony(params) => Box::new(Mahony::new(sample_period, params)),
+        Algorithm::Madgwick(params) => Box::new(Madgwick::new(sample_period, params)),
+        Algorithm::Vqf => Box::new(Vqf::new(sample_period, VqfParams::default())),
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut paths: Vec<PathBuf> = glob("data/*.parquet")?.filter_map(Result::ok).collect();
-    paths.sort();
+    if std::env::args().len() > 1 {
+        return Err("run without arguments to compare BROAD scores".into());
+    }
 
     let dt = Duration::from_secs_f32(0.0035);
-
-    let algorithms_to_test = [
-        ("Mahony", Algorithm::Mahony),
-        ("Madgwick", Algorithm::Madgwick),
-        ("Vqf", Algorithm::Vqf),
+    let recordings = load_recordings(dt)?;
+    let algorithms = [
+        ("Mahony default", Algorithm::Mahony(MahonyParams::default())),
+        ("Mahony filtered", Algorithm::Mahony(filtered_mahony())),
+        (
+            "Madgwick default",
+            Algorithm::Madgwick(MadgwickParams::default()),
+        ),
+        (
+            "Madgwick filtered",
+            Algorithm::Madgwick(filtered_madgwick()),
+        ),
+        ("VQF default", Algorithm::Vqf),
     ];
 
-    let mut all_scores: HashMap<(&str, bool), Vec<RmseScore>> = HashMap::new();
+    println!(
+        "BROAD: {} recordings, sample period {dt:?}",
+        recordings.len()
+    );
+    println!("First 1.5 s excluded in both calibration modes; movement samples only.");
+    println!("Filtered Mahony: kp=0.74, ki=0.0012, tau=750 ms");
+    println!("Filtered Madgwick: beta=0.02, tau=2 s");
 
-    if paths.is_empty() {
-        return Err(
-            "no BROAD recordings found in data/*.parquet; run from examples/broad_score".into(),
-        );
+    let mut results = Vec::new();
+    for (name, algorithm) in algorithms {
+        eprintln!("Scoring {name}...");
+        let off = mean(score_algorithm(&recordings, algorithm, dt, false)?.into_iter());
+        let on = mean(score_algorithm(&recordings, algorithm, dt, true)?.into_iter());
+        results.push((name, off, on));
     }
-    for entry in &paths {
-        let df = ParquetReader::new(File::open(entry)?).finish()?;
-        let (gyro_calibration, startup_samples) =
-            calibrate_startup(&df, dt).map_err(|error| format!("{}: {error}", entry.display()))?;
-        if startup_samples >= df.height() {
-            return Err(format!("{}: no samples remain after calibration", entry.display()).into());
-        }
-        // Slice sensor readings and reference quaternions together so that
-        // calibration samples never contribute to scored errors.
-        let start = i64::try_from(startup_samples)?;
-        let evaluation_df = df.slice(start, df.height() - startup_samples);
+
+    println!("\nMean per-recording RMSE (degrees; lower is better)");
+    println!(
+        "{:<20} | {:^32} | {:^32}",
+        "", "Startup calibration OFF", "Startup calibration ON"
+    );
+    println!(
+        "{:<20} | {:>8} {:>10} {:>12} | {:>8} {:>10} {:>12}",
+        "Algorithm", "Total", "Heading", "Inclination", "Total", "Heading", "Inclination"
+    );
+    println!("{:-<20}-+-{:-<32}-+-{:-<32}", "", "", "");
+    for (name, off, on) in results {
         println!(
-            "{}: calibrated {} samples ({:.4} s), bias (rad/s) = {:?}",
-            entry.display(),
-            startup_samples,
-            startup_samples as f64 * dt.as_secs_f64(),
-            gyro_calibration.offset,
+            "{name:<20} | {:>8.4} {:>10.4} {:>12.4} | {:>8.4} {:>10.4} {:>12.4}",
+            off.total, off.heading, off.inclination, on.total, on.heading, on.inclination
         );
-        for (name, algo) in algorithms_to_test {
-            for calibration_enabled in [false, true] {
-                let correction = if calibration_enabled {
-                    gyro_calibration
-                } else {
-                    InertialCalibration::default()
-                };
-                // Both modes use the same post-startup rows and initial
-                // orientation, with all filter state reset between runs.
-                let mut ahrs = make_ahrs(algo, dt);
-                let result_df = evaluate_dataset(&evaluation_df, ahrs.as_mut(), &correction)?;
-                let score = analyze_results(&result_df)?;
-                all_scores
-                    .entry((name, calibration_enabled))
-                    .or_default()
-                    .push(score);
-            }
-        }
     }
-
-    for (name, _) in algorithms_to_test {
-        for calibration_enabled in [false, true] {
-            let scores = all_scores
-                .get(&(name, calibration_enabled))
-                .ok_or("missing comparison scores")?;
-            let count = scores.len() as f32;
-            let mean_total = scores.iter().map(|s| s.total).sum::<f32>() / count;
-            let mean_heading = scores.iter().map(|s| s.heading).sum::<f32>() / count;
-            let mean_inclination = scores.iter().map(|s| s.inclination).sum::<f32>() / count;
-            let mode = if calibration_enabled { "on" } else { "off" };
-            println!(
-                "Algorithm: {name} (startup calibration {mode}, {} recordings)",
-                scores.len()
-            );
-            println!("  AVG Total RMSE:       {mean_total:.4} deg");
-            println!("  AVG Heading RMSE:     {mean_heading:.4} deg");
-            println!("  AVG Inclination RMSE: {mean_inclination:.4} deg");
-        }
-    }
-
     Ok(())
+}
+
+struct Recording {
+    name: String,
+    evaluation: DataFrame,
+    calibration: InertialCalibration,
+}
+
+fn mean(scores: impl Iterator<Item = RmseScore>) -> RmseScore {
+    let mut sum = RmseScore {
+        total: 0.0,
+        heading: 0.0,
+        inclination: 0.0,
+    };
+    let mut count = 0;
+    for score in scores {
+        sum.total += score.total;
+        sum.heading += score.heading;
+        sum.inclination += score.inclination;
+        count += 1;
+    }
+    let divisor = count as f32;
+    RmseScore {
+        total: sum.total / divisor,
+        heading: sum.heading / divisor,
+        inclination: sum.inclination / divisor,
+    }
+}
+
+fn score_algorithm(
+    recordings: &[Recording],
+    algorithm: Algorithm,
+    dt: Duration,
+    calibrated: bool,
+) -> Result<Vec<RmseScore>, String> {
+    recordings
+        .iter()
+        .map(|recording| {
+            let mut filter = make_ahrs(algorithm, dt);
+            let calibration = if calibrated {
+                recording.calibration
+            } else {
+                InertialCalibration::default()
+            };
+            let result = evaluate_dataset(&recording.evaluation, filter.as_mut(), &calibration)
+                .and_then(|df| analyze_results(&df))
+                .map_err(|error| format!("{}: {error}", recording.name))?;
+            if ![result.total, result.heading, result.inclination]
+                .iter()
+                .all(|v| v.is_finite())
+            {
+                return Err(format!("{}: non-finite score", recording.name));
+            }
+            Ok(result)
+        })
+        .collect()
+}
+
+fn load_recordings(dt: Duration) -> Result<Vec<Recording>, Box<dyn Error>> {
+    let mut paths: Vec<_> = glob("data/*.parquet")?.collect::<Result<_, _>>()?;
+    paths.sort();
+    if paths.is_empty() {
+        return Err("no BROAD recordings in data/*.parquet".into());
+    }
+    let mut recordings = Vec::new();
+    for path in paths {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("invalid recording filename")?
+            .to_owned();
+        let df = ParquetReader::new(File::open(&path)?).finish()?;
+        let (calibration, start) =
+            calibrate_startup(&df, dt).map_err(|error| format!("{name}: {error}"))?;
+        if start >= df.height() {
+            return Err(format!("{name}: no evaluation samples").into());
+        }
+        recordings.push(Recording {
+            name,
+            evaluation: df.slice(i64::try_from(start)?, df.height() - start),
+            calibration,
+        });
+    }
+    Ok(recordings)
 }
 
 #[cfg(test)]

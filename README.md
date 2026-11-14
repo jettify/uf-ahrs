@@ -17,6 +17,7 @@
 
 * `no_std` and allocator-free, with no dependency on a specific MCU or sensor driver.
 * `Mahony`, `Madgwick`, and `Vqf` filters behind a shared `Ahrs` interface.
+* `Mahony`, `Madgwick` support `Vqf` style accelerometer filtering that improve RMSE 2x.
 * Gyroscope-only, IMU (gyroscope + accelerometer), and IMU + magnetometer updates.
 * External heading input for heading correction without a magnetometer.
 * VQF gyroscope bias estimation during motion and rest, plus magnetic disturbance rejection.
@@ -216,33 +217,26 @@ For context, BROAD contains **39 trials** with synchronized IMU and optical grou
 See the [BROAD dataset publication](https://www.mdpi.com/2306-5729/6/7/72) for details.
 
 Reported metrics are dataset-averaged orientation errors in degrees:
-`AVG Total RMSE`, `AVG Heading RMSE`, and `AVG Inclination RMSE`.
+```text
+BROAD: 39 recordings, sample period 3.5ms
+First 1.5 s excluded in both calibration modes; movement samples only.
+Filtered Mahony: kp=0.74, ki=0.0012, tau=750 ms
+Filtered Madgwick: beta=0.02, tau=2 s
+Scoring Mahony default...
+Scoring Mahony filtered...
+Scoring Madgwick default...
+Scoring Madgwick filtered...
+Scoring VQF default...
 
-```bash no_run
-Algorithm: Mahony (startup calibration off, 39 recordings)
-  AVG Total RMSE:       7.4625 deg
-  AVG Heading RMSE:     6.2728 deg
-  AVG Inclination RMSE: 3.6924 deg
-Algorithm: Mahony (startup calibration on, 39 recordings)
-  AVG Total RMSE:       6.2489 deg
-  AVG Heading RMSE:     5.0200 deg
-  AVG Inclination RMSE: 3.4840 deg
-Algorithm: Madgwick (startup calibration off, 39 recordings)
-  AVG Total RMSE:       5.0831 deg
-  AVG Heading RMSE:     4.3588 deg
-  AVG Inclination RMSE: 2.3404 deg
-Algorithm: Madgwick (startup calibration on, 39 recordings)
-  AVG Total RMSE:       3.6888 deg
-  AVG Heading RMSE:     2.8634 deg
-  AVG Inclination RMSE: 2.0598 deg
-Algorithm: Vqf (startup calibration off, 39 recordings)
-  AVG Total RMSE:       2.3003 deg
-  AVG Heading RMSE:     2.1525 deg
-  AVG Inclination RMSE: 0.6963 deg
-Algorithm: Vqf (startup calibration on, 39 recordings)
-  AVG Total RMSE:       2.3018 deg
-  AVG Heading RMSE:     2.1543 deg
-  AVG Inclination RMSE: 0.6962 deg
+Mean per-recording RMSE (degrees; lower is better)
+                     |     Startup calibration OFF      |      Startup calibration ON
+Algorithm            |    Total    Heading  Inclination |    Total    Heading  Inclination
+---------------------+----------------------------------+---------------------------------
+Mahony default       |   7.4511     6.2592       3.6905 |   6.2364     5.0054       3.4820
+Mahony filtered      |   5.3538     4.9571       1.7972 |   3.4642     3.0406       1.4571
+Madgwick default     |   5.0682     4.3411       2.3391 |   3.6718     2.8428       2.0579
+Madgwick filtered    |   2.7939     2.4684       1.2309 |   2.4255     2.1472       0.9974
+VQF default          |   2.3003     2.1525       0.6963 |   2.3018     2.1543       0.6962
 ```
 
 ## Embedded Performance
@@ -263,20 +257,36 @@ benchmark configures the chip to run at `100 MHz`.
 
 ### Memory usage
 
-These measurements use `cargo size --release --no-default-features` with `defmt` disabled.
-Flash total is `text + data`. Static RAM is `data + bss` and excludes the runtime stack.
+These measurements use release builds with default features and `defmt` disabled.
+Reproduce them from the repository root:
 
-Flash delta is the additional flash used compared with the `size-base` firmware shown in the first row.
+```sh
+cd examples/stm32-blackpill-bench
+just size
+# Show individual sections:
+just size-sections
+```
 
-| Experiment | Flash total | Flash delta vs base | Static RAM |
-| --- | ---: | ---: | ---: |
-| Base firmware | `2_556` B | - | 4 B |
-| Mahony IMU | `3_884` B | `1_328` B | 4 B |
-| Mahony IMU + magnetometer | `4_616` B | `2_060` B | 4 B |
-| Madgwick IMU | `4_060` B | `1_504` B | 4 B |
-| Madgwick IMU + magnetometer | `5_064` B | `2_508` B | 4 B |
-| VQF IMU | `28_844` B | `26_288` B | 4 B |
-| VQF IMU + magnetometer | `32_356` B | `29_800` B | 4 B |
+Flash total is `text + data`. Flash delta is relative to the base firmware.
+Static RAM is `data + bss`; it excludes the runtime stack, including filter state stored there.
+All sizes below are in bytes.
+
+| Filter | Update | Flash total | Flash delta vs base | Static RAM |
+| --- | --- | ---: | ---: | ---: |
+| Base firmware | — | 2,556 | — | 4 |
+| Mahony | IMU | 18,860 | +16,304 | 4 |
+| Mahony filtered | IMU | 18,916 | +16,360 | 4 |
+| Mahony | IMU + magnetometer | 18,972 | +16,416 | 4 |
+| Mahony filtered | IMU + magnetometer | 19,020 | +16,464 | 4 |
+| Madgwick | IMU | 17,756 | +15,200 | 4 |
+| Madgwick filtered | IMU | 17,796 | +15,240 | 4 |
+| Madgwick | IMU + magnetometer | 18,980 | +16,424 | 4 |
+| Madgwick filtered | IMU + magnetometer | 19,020 | +16,464 | 4 |
+| VQF | IMU | 28,844 | +26,288 | 4 |
+| VQF | IMU + magnetometer | 32,356 | +29,800 | 4 |
+
+Filtered Mahony uses `kp=0.74`, `ki=0.0012`, and `tau=750 ms`; filtered Madgwick
+uses `beta=0.02` and `tau=2 s`. Unfiltered rows use library defaults.
 
 ## License
 
