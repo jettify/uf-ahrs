@@ -43,6 +43,30 @@ fn mahony_imu() -> AhrsBox {
 }
 
 #[fixture]
+fn mahony_filtered_gyro() -> AhrsBox {
+    Box::new(Mahony::new(
+        GYRO_PERIOD,
+        MahonyParams {
+            tau_accelerometer: Duration::from_millis(750),
+            ..Default::default()
+        },
+    ))
+}
+
+#[fixture]
+fn mahony_filtered_imu() -> AhrsBox {
+    Box::new(Mahony::new(
+        IMU_PERIOD,
+        MahonyParams {
+            kp: 0.74,
+            ki: 0.0012,
+            tau_accelerometer: Duration::from_millis(750),
+            ..MahonyParams::default()
+        },
+    ))
+}
+
+#[fixture]
 fn madgwick_gyro() -> AhrsBox {
     Box::new(Madgwick::new(GYRO_PERIOD, MadgwickParams::default()))
 }
@@ -50,6 +74,29 @@ fn madgwick_gyro() -> AhrsBox {
 #[fixture]
 fn madgwick_imu() -> AhrsBox {
     Box::new(Madgwick::new(IMU_PERIOD, MadgwickParams::default()))
+}
+
+#[fixture]
+fn madgwick_filtered_gyro() -> AhrsBox {
+    Box::new(Madgwick::new(
+        GYRO_PERIOD,
+        MadgwickParams {
+            tau_accelerometer: Duration::from_secs(2),
+            ..Default::default()
+        },
+    ))
+}
+
+#[fixture]
+fn madgwick_filtered_imu() -> AhrsBox {
+    Box::new(Madgwick::new(
+        IMU_PERIOD,
+        MadgwickParams {
+            beta: 0.05,
+            tau_accelerometer: Duration::from_secs(2),
+            ..MadgwickParams::default()
+        },
+    ))
 }
 
 #[fixture]
@@ -95,7 +142,9 @@ fn run_update_steps(
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro())]
 fn test_zero_rotation(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0f32, 0.0f32, 0.0f32);
@@ -108,7 +157,9 @@ fn test_zero_rotation(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro())]
 fn test_gyro_roll_estimation(#[case] mut ahrs: AhrsBox) {
     ahrs.update_gyro(Vector3::new(0.5f32, 0.0f32, 0.0f32));
@@ -120,7 +171,9 @@ fn test_gyro_roll_estimation(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro())]
 fn test_gyro_pitch_estimation(#[case] mut ahrs: AhrsBox) {
     ahrs.update_gyro(Vector3::new(0.0f32, 0.5f32, 0.0f32));
@@ -129,7 +182,9 @@ fn test_gyro_pitch_estimation(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro())]
 fn test_gyro_yaw_estimation(#[case] mut ahrs: AhrsBox) {
     ahrs.update_gyro(Vector3::new(0.0f32, 0.0f32, 0.5f32));
@@ -138,7 +193,9 @@ fn test_gyro_yaw_estimation(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 fn test_gyro_large_step_matches_body_frame_rotation(#[case] mut ahrs: AhrsBox) {
     let initial = UnitQuaternion::from_euler_angles(0.6, -0.4, 0.8);
     let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, -2.0, 3.0));
@@ -154,7 +211,9 @@ fn test_gyro_large_step_matches_body_frame_rotation(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 fn test_gyro_repeated_rotations_preserve_accuracy_and_norm(#[case] mut ahrs: AhrsBox) {
     let axis = nalgebra::Unit::new_normalize(Vector3::new(-2.0, 1.0, 3.0));
     for _ in 0..10_000 {
@@ -170,7 +229,9 @@ fn test_gyro_repeated_rotations_preserve_accuracy_and_norm(#[case] mut ahrs: Ahr
 
 #[rstest]
 #[case::mahony(Box::new(Mahony::default()) as Box<dyn AhrsWithDt>)]
+#[case::mahony_filtered(Box::new(Mahony::new(IMU_PERIOD, MahonyParams {tau_accelerometer: Duration::from_millis(750), ..Default::default()})) as Box<dyn AhrsWithDt>)]
 #[case::madgwick(Box::new(Madgwick::default()) as Box<dyn AhrsWithDt>)]
+#[case::madgwick_filtered(Box::new(Madgwick::new(IMU_PERIOD, MadgwickParams {tau_accelerometer: Duration::from_secs(2), ..Default::default()})) as Box<dyn AhrsWithDt>)]
 fn test_gyro_zero_and_tiny_steps(#[case] mut ahrs: Box<dyn AhrsWithDt>) {
     let initial = UnitQuaternion::from_euler_angles(0.3, -0.2, 0.5);
     ahrs.set_orientation(initial);
@@ -197,8 +258,8 @@ fn test_gyro_zero_and_tiny_steps(#[case] mut ahrs: Box<dyn AhrsWithDt>) {
 }
 
 #[rstest]
-#[case::mahony(Box::new(Mahony::new(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 })) as Box<dyn AhrsWithDt>)]
-#[case::madgwick(Box::new(Madgwick::new(IMU_PERIOD, MadgwickParams { beta: 0.0 })) as Box<dyn AhrsWithDt>)]
+#[case::mahony(Box::new(Mahony::new(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0, ..MahonyParams::default() })) as Box<dyn AhrsWithDt>)]
+#[case::madgwick(Box::new(Madgwick::new(IMU_PERIOD, MadgwickParams { beta: 0.0, ..MadgwickParams::default() })) as Box<dyn AhrsWithDt>)]
 fn test_zero_feedback_all_update_paths_match_exponential(#[case] mut ahrs: Box<dyn AhrsWithDt>) {
     let initial = UnitQuaternion::from_euler_angles(0.3, -0.5, 0.7);
     let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, -3.0));
@@ -226,7 +287,14 @@ fn test_zero_feedback_all_update_paths_match_exponential(#[case] mut ahrs: Box<d
 
 #[test]
 fn test_mahony_exponential_uses_bias_corrected_rate() {
-    let mut ahrs = Mahony::new(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 });
+    let mut ahrs = Mahony::new(
+        IMU_PERIOD,
+        MahonyParams {
+            kp: 0.0,
+            ki: 0.0,
+            ..MahonyParams::default()
+        },
+    );
     ahrs.bias = Vector3::new(1.0, -2.0, 0.5);
     let gyro = ahrs.bias + Vector3::z() * 6.0;
     let actual = ahrs.update_imu_with_dt(Duration::from_millis(200), gyro, Vector3::z());
@@ -239,7 +307,9 @@ fn test_mahony_exponential_uses_bias_corrected_rate() {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_imu_level(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -250,7 +320,9 @@ fn test_imu_level(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_imu_pitch_45(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -261,7 +333,9 @@ fn test_imu_pitch_45(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_imu_roll_45(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -272,7 +346,9 @@ fn test_imu_roll_45(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_update_level(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -284,7 +360,9 @@ fn test_update_level(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_update_yaw_90(#[case] mut ahrs: AhrsBox) {
     let gyro = Vector3::new(0.0, 0.0, 0.0);
@@ -296,7 +374,9 @@ fn test_update_yaw_90(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu(), mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu(), mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu(), madgwick_filtered_imu())]
 #[case::vqf(vqf_imu(), vqf_imu())]
 fn test_update_zero_magnetometer_falls_back_to_imu(
     #[case] mut ahrs_update: AhrsBox,
@@ -314,7 +394,9 @@ fn test_update_zero_magnetometer_falls_back_to_imu(
 
 #[rstest]
 #[case::mahony(mahony_gyro(), mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro(), mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro(), madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro(), madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro(), vqf_gyro())]
 fn test_imu_zero_accelerometer_falls_back_to_gyro(
     #[case] mut ahrs_imu: AhrsBox,
@@ -331,7 +413,9 @@ fn test_imu_zero_accelerometer_falls_back_to_gyro(
 
 #[rstest]
 #[case::mahony(mahony_gyro())]
+#[case::mahony_filtered(mahony_filtered_gyro())]
 #[case::madgwick(madgwick_gyro())]
+#[case::madgwick_filtered(madgwick_filtered_gyro())]
 #[case::vqf(vqf_gyro())]
 fn test_set_orientation_round_trip(#[case] mut ahrs: AhrsBox) {
     let expected = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
@@ -341,7 +425,9 @@ fn test_set_orientation_round_trip(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_heading_magnetometer_level_headings(#[case] ahrs: AhrsBox) {
     for (heading, expected) in [
@@ -358,7 +444,9 @@ fn test_heading_magnetometer_level_headings(#[case] ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_heading_magnetometer_matches_tilt_compensated_reference(#[case] mut ahrs: AhrsBox) {
     // Include inverted attitudes and pitch outside the canonical Euler range.
@@ -391,7 +479,9 @@ fn test_heading_magnetometer_matches_tilt_compensated_reference(#[case] mut ahrs
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_heading_magnetometer_zero_pitch_matches_original_formula(#[case] mut ahrs: AhrsBox) {
     for roll in [-2.0_f32, -0.5, 0.0, 0.8, 2.5] {
@@ -410,7 +500,9 @@ fn test_heading_magnetometer_zero_pitch_matches_original_formula(#[case] mut ahr
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_heading_magnetometer_quaternion_sign_invariance(#[case] mut ahrs: AhrsBox) {
     let orientation = UnitQuaternion::from_euler_angles(0.4, -0.7, 1.2);
@@ -423,7 +515,9 @@ fn test_heading_magnetometer_quaternion_sign_invariance(#[case] mut ahrs: AhrsBo
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_heading_magnetometer_vertical_threshold(#[case] mut ahrs: AhrsBox) {
     for sign in [-1.0, 1.0] {
@@ -447,7 +541,9 @@ fn test_heading_magnetometer_vertical_threshold(#[case] mut ahrs: AhrsBox) {
 
 #[rstest]
 #[case::mahony(mahony_imu(), mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu(), mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu(), madgwick_filtered_imu())]
 #[case::vqf(vqf_imu(), vqf_imu())]
 fn test_update_external_heading_matches_manual_update(
     #[case] mut external: AhrsBox,
@@ -474,7 +570,9 @@ fn test_update_external_heading_matches_manual_update(
 
 #[rstest]
 #[case::mahony(mahony_imu(), mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu(), mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu(), madgwick_filtered_imu())]
 #[case::vqf(vqf_imu(), vqf_imu())]
 fn test_update_external_heading_vertical_matches_imu_update(
     #[case] mut external: AhrsBox,
@@ -495,7 +593,9 @@ fn test_update_external_heading_vertical_matches_imu_update(
 
 #[rstest]
 #[case::mahony(mahony_imu(), mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu(), mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu(), madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu(), madgwick_filtered_imu())]
 #[case::vqf(vqf_imu(), vqf_imu())]
 fn test_nonfinite_external_heading_falls_back_to_imu_update(
     #[case] mut external: AhrsBox,
@@ -518,7 +618,9 @@ fn test_nonfinite_external_heading_falls_back_to_imu_update(
 
 #[rstest]
 #[case::mahony(mahony_imu())]
+#[case::mahony_filtered(mahony_filtered_imu())]
 #[case::madgwick(madgwick_imu())]
+#[case::madgwick_filtered(madgwick_filtered_imu())]
 #[case::vqf(vqf_imu())]
 fn test_update_external_heading_converges_when_tilted(#[case] mut ahrs: AhrsBox) {
     let expected_roll = 0.3;
@@ -680,7 +782,10 @@ fn test_vqf_update2_updates_orientation() {
 #[test]
 fn test_madgwick_set_params_round_trip() {
     let mut ahrs = Madgwick::new(IMU_PERIOD, MadgwickParams::default());
-    let params = MadgwickParams { beta: 0.2 };
+    let params = MadgwickParams {
+        beta: 0.2,
+        ..MadgwickParams::default()
+    };
     ahrs.set_params(params);
     assert_eq!(ahrs.params(), params);
 }
@@ -688,7 +793,11 @@ fn test_madgwick_set_params_round_trip() {
 #[test]
 fn test_mahony_set_params_round_trip() {
     let mut ahrs = Mahony::new(IMU_PERIOD, MahonyParams::default());
-    let params = MahonyParams { kp: 2.0, ki: 0.01 };
+    let params = MahonyParams {
+        kp: 2.0,
+        ki: 0.01,
+        ..MahonyParams::default()
+    };
     ahrs.set_params(params);
     assert_eq!(ahrs.params(), params);
 }
@@ -699,14 +808,24 @@ fn test_madgwick_set_params_takes_effect() {
     let tilted = UnitQuaternion::from_euler_angles(FRAC_PI_4, 0.0, 0.0);
     let gyro = Vector3::new(0.0, 0.0, 0.0);
     let accel = Vector3::new(0.0, 0.0, 1.0);
-    let mut ahrs = Madgwick::new_with_orientation(IMU_PERIOD, MadgwickParams { beta: 0.0 }, tilted);
+    let mut ahrs = Madgwick::new_with_orientation(
+        IMU_PERIOD,
+        MadgwickParams {
+            beta: 0.0,
+            ..MadgwickParams::default()
+        },
+        tilted,
+    );
 
     // With zero gain the accelerometer is ignored: the tilt stays.
     run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
     assert_euler_close(ahrs.orientation(), FRAC_PI_4, 0.0, 0.0, EPS_GYRO);
 
     // Raising the gain mid-run lets it converge to level.
-    ahrs.set_params(MadgwickParams { beta: 0.5 });
+    ahrs.set_params(MadgwickParams {
+        beta: 0.5,
+        ..MadgwickParams::default()
+    });
     run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
     assert_euler_close(ahrs.orientation(), 0.0, 0.0, 0.0, EPS_IMU);
 }
@@ -716,8 +835,15 @@ fn test_mahony_set_params_takes_effect() {
     let tilted = UnitQuaternion::from_euler_angles(FRAC_PI_4, 0.0, 0.0);
     let gyro = Vector3::new(0.0, 0.0, 0.0);
     let accel = Vector3::new(0.0, 0.0, 1.0);
-    let mut ahrs =
-        Mahony::new_with_orientation(IMU_PERIOD, MahonyParams { kp: 0.0, ki: 0.0 }, tilted);
+    let mut ahrs = Mahony::new_with_orientation(
+        IMU_PERIOD,
+        MahonyParams {
+            kp: 0.0,
+            ki: 0.0,
+            ..MahonyParams::default()
+        },
+        tilted,
+    );
 
     run_imu_steps(&mut ahrs, IMU_STEPS, gyro, accel);
     assert_euler_close(ahrs.orientation(), FRAC_PI_4, 0.0, 0.0, EPS_GYRO);

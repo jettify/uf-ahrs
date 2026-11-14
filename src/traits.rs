@@ -59,9 +59,10 @@ pub trait Ahrs {
     /// consistent units, and the finite `heading` is in radians following the
     /// orientation's positive yaw convention.
     ///
-    /// Converts the heading with [`Ahrs::heading_magnetometer`] and delegates to
-    /// [`Ahrs::update`], retaining the filter's correction gains and magnetometer
-    /// rejection behavior. Near vertical, only gyro/accelerometer updates apply.
+    /// The default implementation converts the heading with
+    /// [`Ahrs::heading_magnetometer`] and delegates to [`Ahrs::update`], retaining
+    /// the filter's correction gains and magnetometer rejection behavior.
+    /// Near vertical, only gyro/accelerometer updates apply.
     /// Returns the updated orientation estimate; heading is not set instantly.
     ///
     /// ```
