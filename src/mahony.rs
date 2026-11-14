@@ -43,7 +43,7 @@ impl Default for MahonyParams {
 #[derive(Debug)]
 pub struct Mahony {
     sample_period: Duration,
-    prefilter: Option<AccelPrefilter>,
+    accel_prefilter: Option<AccelPrefilter>,
     params: MahonyParams,
     /// Estimated gyroscope bias in radians per second.
     pub bias: Vector3<f32>,
@@ -78,7 +78,7 @@ impl Mahony {
     ) -> Self {
         Mahony {
             sample_period,
-            prefilter: AccelPrefilter::new(params.tau_accelerometer),
+            accel_prefilter: AccelPrefilter::new(params.tau_accelerometer),
             params,
             bias: Vector3::new(0.0, 0.0, 0.0),
             quaternion: orientation,
@@ -99,22 +99,18 @@ impl Mahony {
     /// The estimated gyroscope [`bias`](Self::bias) is kept.
     pub fn set_params(&mut self, params: MahonyParams) {
         if params.tau_accelerometer != self.params.tau_accelerometer {
-            self.prefilter =
-                AccelPrefilter::reconfigure(self.prefilter.take(), params.tau_accelerometer);
+            self.accel_prefilter =
+                AccelPrefilter::reconfigure(self.accel_prefilter.take(), params.tau_accelerometer);
         }
         self.params = params;
     }
 
-    fn update_gyro_with_dt_seconds(
-        &mut self,
-        gyroscope: Vector3<f32>,
-        dt: f32,
-    ) -> UnitQuaternion<f32> {
+    fn update_gyro_raw(&mut self, gyroscope: Vector3<f32>, dt: f32) -> UnitQuaternion<f32> {
         self.quaternion = integrate_gyro(self.quaternion, gyroscope, dt);
         self.quaternion
     }
 
-    fn update_imu_with_dt_seconds(
+    fn update_imu_raw(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
@@ -123,7 +119,7 @@ impl Mahony {
         let q = self.quaternion.as_ref();
 
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro_with_dt_seconds(gyroscope, dt);
+            return self.update_gyro_raw(gyroscope, dt);
         };
         let v = Vector3::new(
             2.0 * (q.coords.x * q.coords.z - q.coords.w * q.coords.y),
@@ -136,10 +132,10 @@ impl Mahony {
         let b_dot = -self.params.ki * e;
         self.bias += b_dot * dt;
         let corrected = gyroscope + e * self.params.kp - self.bias;
-        self.update_gyro_with_dt_seconds(corrected, dt)
+        self.update_gyro_raw(corrected, dt)
     }
 
-    fn update_with_dt_seconds(
+    fn update_marg_raw(
         &mut self,
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
@@ -147,11 +143,11 @@ impl Mahony {
         dt: f32,
     ) -> UnitQuaternion<f32> {
         let Some(accel) = accelerometer.try_normalize(f32::EPSILON) else {
-            return self.update_gyro_with_dt_seconds(gyroscope, dt);
+            return self.update_gyro_raw(gyroscope, dt);
         };
 
         let Some(mag) = magnetometer.try_normalize(f32::EPSILON) else {
-            return self.update_imu_with_dt_seconds(gyroscope, accelerometer, dt);
+            return self.update_imu_raw(gyroscope, accelerometer, dt);
         };
 
         let q = self.quaternion.as_ref();
@@ -185,12 +181,10 @@ impl Mahony {
         self.bias += b_dot * dt;
 
         let corrected = gyroscope + e * self.params.kp - self.bias;
-        self.update_gyro_with_dt_seconds(corrected, dt)
+        self.update_gyro_raw(corrected, dt)
     }
-}
 
-impl Mahony {
-    fn step(
+    fn update_internal(
         &mut self,
         dt: Duration,
         gyro: Vector3<f32>,
@@ -198,12 +192,12 @@ impl Mahony {
         mag: Option<Vector3<f32>>,
     ) -> UnitQuaternion<f32> {
         let seconds = dt.as_secs_f32();
-        let Some(prefilter) = self.prefilter.as_mut() else {
+        let Some(prefilter) = self.accel_prefilter.as_mut() else {
             // True bypass: retain raw input, normalization and legacy update order.
             return match (accel, mag) {
-                (Some(accel), Some(mag)) => self.update_with_dt_seconds(gyro, accel, mag, seconds),
-                (Some(accel), None) => self.update_imu_with_dt_seconds(gyro, accel, seconds),
-                (None, _) => self.update_gyro_with_dt_seconds(gyro, seconds),
+                (Some(accel), Some(mag)) => self.update_marg_raw(gyro, accel, mag, seconds),
+                (Some(accel), None) => self.update_imu_raw(gyro, accel, seconds),
+                (None, _) => self.update_gyro_raw(gyro, seconds),
             };
         };
         let previous_bias = self.bias;
@@ -218,9 +212,9 @@ impl Mahony {
         }
         let accel = accel.and_then(|accel| prefilter.filter(accel, self.params.tau_accelerometer));
         let candidate = match (accel, mag.and_then(try_normalize_finite)) {
-            (Some(accel), Some(mag)) => self.update_with_dt_seconds(gyro, accel, mag, seconds),
-            (Some(accel), None) => self.update_imu_with_dt_seconds(gyro, accel, seconds),
-            (None, _) => self.update_gyro_with_dt_seconds(gyro, seconds),
+            (Some(accel), Some(mag)) => self.update_marg_raw(gyro, accel, mag, seconds),
+            (Some(accel), None) => self.update_imu_raw(gyro, accel, seconds),
+            (None, _) => self.update_gyro_raw(gyro, seconds),
         };
         if !is_finite_orientation(candidate) || !is_finite_vector(self.bias) {
             self.quaternion = fallback;
@@ -238,11 +232,11 @@ impl Ahrs for Mahony {
     fn set_orientation(&mut self, quat: UnitQuaternion<f32>) {
         self.bias = Vector3::new(0.0, 0.0, 0.0);
         self.quaternion = quat;
-        self.prefilter = AccelPrefilter::new(self.params.tau_accelerometer);
+        self.accel_prefilter = AccelPrefilter::new(self.params.tau_accelerometer);
     }
 
     fn update_gyro(&mut self, gyroscope: Vector3<f32>) -> UnitQuaternion<f32> {
-        self.step(self.sample_period, gyroscope, None, None)
+        self.update_internal(self.sample_period, gyroscope, None, None)
     }
 
     fn update_imu(
@@ -250,7 +244,7 @@ impl Ahrs for Mahony {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(self.sample_period, gyroscope, Some(accelerometer), None)
+        self.update_internal(self.sample_period, gyroscope, Some(accelerometer), None)
     }
 
     fn update(
@@ -259,7 +253,7 @@ impl Ahrs for Mahony {
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(
+        self.update_internal(
             self.sample_period,
             gyroscope,
             Some(accelerometer),
@@ -276,7 +270,7 @@ impl AhrsWithDt for Mahony {
         accelerometer: Vector3<f32>,
         magnetometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, Some(accelerometer), Some(magnetometer))
+        self.update_internal(dt, gyroscope, Some(accelerometer), Some(magnetometer))
     }
 
     fn update_imu_with_dt(
@@ -285,7 +279,7 @@ impl AhrsWithDt for Mahony {
         gyroscope: Vector3<f32>,
         accelerometer: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, Some(accelerometer), None)
+        self.update_internal(dt, gyroscope, Some(accelerometer), None)
     }
 
     fn update_gyro_with_dt(
@@ -293,7 +287,7 @@ impl AhrsWithDt for Mahony {
         dt: Duration,
         gyroscope: Vector3<f32>,
     ) -> UnitQuaternion<f32> {
-        self.step(dt, gyroscope, None, None)
+        self.update_internal(dt, gyroscope, None, None)
     }
 }
 
