@@ -85,3 +85,20 @@ ci-stm32:
 [group('test')]
 eval:
   @just --justfile examples/broad_score/justfile r
+
+# Open the USB serial console
+[group('test')]
+screen port="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  port={{quote(port)}}
+  if [[ -z "$port" ]]; then
+    shopt -s nullglob
+    set -- /dev/cu.usbmodem* /dev/ttyACM*
+    case $# in
+      0) echo "No USB serial port found. Connect the board in firmware mode." >&2; exit 1 ;;
+      1) port="$1" ;;
+      *) printf '%s\n' 'Multiple USB serial ports found. Run just screen <port> with one of:' "$@" >&2; exit 1 ;;
+    esac
+  fi
+  exec screen "$port" 115200

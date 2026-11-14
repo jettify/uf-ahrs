@@ -35,7 +35,7 @@ bsp::bind_board_interrupts!(struct Irqs {
 
 const IMU_ODR_HZ: u64 = 1_000;
 const SAMPLE_PERIOD: Duration = Duration::from_micros(1_000_000 / IMU_ODR_HZ);
-const LOG_HZ: u64 = 2;
+const LOG_HZ: u64 = 5;
 const LOG_EVERY_N_SAMPLES: u64 = IMU_ODR_HZ / LOG_HZ;
 // The driver uses 20-byte high-resolution FIFO packets and a one-packet watermark.
 const FIFO_PACKET_BYTES: u16 = core::mem::size_of::<icm426xx::fifo::FifoPacket4>() as u16;
@@ -101,8 +101,12 @@ async fn main(_spawner: Spawner) {
     let mut imu = ImuReader::new(icm, drdy);
     let gyro_calibration = calibrate_gyro(&mut imu, calibrator).await;
 
-    let mut mahony =
-        Mahony::new_with_orientation(SAMPLE_PERIOD, MahonyParams::default(), DOWN_TO_UP);
+    let params = MahonyParams {
+        kp: 0.74,
+        ki: 0.0012,
+        tau_accelerometer: Duration::from_millis(750),
+    };
+    let mut mahony = Mahony::new_with_orientation(SAMPLE_PERIOD, params, DOWN_TO_UP);
     let mut samples_since_log = 0;
 
     loop {
