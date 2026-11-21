@@ -239,6 +239,12 @@ Madgwick filtered    |   2.7939     2.4684       1.2309 |   2.4255     2.1472   
 VQF default          |   2.3003     2.1525       0.6963 |   2.3018     2.1543       0.6962
 ```
 
+### Error breakdown: Undisturbed vs. Disturbed trials
+
+The chart below breaks down orientation RMSE across the 23 undisturbed and 16 disturbed trials, as well as by motion and disturbance subcategory (reproduce with `just plot`):
+
+![BROAD Undisturbed vs. Disturbed Error Breakdown](docs/broad_breakdown.svg)
+
 ## Embedded Performance
 
 Measured on an `STM32F411CEUx` Black Pill using the DWT cycle counter. The
